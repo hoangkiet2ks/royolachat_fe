@@ -1,0 +1,1059 @@
+:root {
+  --bg: #07111f;
+  --bg-soft: #0f1c2e;
+  --card: rgba(14, 24, 40, 0.72);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --text: #edf4ff;
+  --muted: #9eb0ca;
+  --primary: #7c5cff;
+  --primary-2: #4cc9f0;
+  --danger: #ff6b81;
+  --success: #26c281;
+  --input: rgba(255, 255, 255, 0.06);
+  --input-border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(124, 92, 255, 0.25),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(76, 201, 240, 0.18),
+      transparent 28%
+    ),
+    linear-gradient(135deg, #06101c 0%, #0b1628 45%, #08111d 100%);
+  color: var(--text);
+}
+
+a {
+  color: #b6c8ff;
+  text-decoration: none;
+}
+
+a:hover {
+  color: white;
+}
+
+.auth-page,
+.dashboard-page,
+.callback-page {
+  min-height: 100vh;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-grid {
+  width: 100%;
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.auth-hero {
+  padding: 32px;
+}
+
+.auth-hero h1 {
+  font-size: clamp(2.4rem, 4vw, 4.4rem);
+  line-height: 1.05;
+  margin: 18px 0 16px;
+  letter-spacing: -0.04em;
+}
+
+.auth-hero p {
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: var(--muted);
+  max-width: 620px;
+}
+
+.brand-chip {
+  display: inline-flex;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  color: #d8ccff;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.hero-badges span,
+.dashboard-badge {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  color: #d7e4ff;
+  font-size: 0.92rem;
+}
+
+.auth-card,
+.dashboard-card,
+.callback-card {
+  background: var(--card);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow);
+  border-radius: 28px;
+}
+
+.auth-card {
+  padding: 28px;
+}
+
+.auth-card-head {
+  margin-bottom: 24px;
+}
+
+.auth-card-head h2,
+.callback-card h2,
+.dashboard-card h1 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+}
+
+.auth-card-head p,
+.callback-card p,
+.dashboard-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 0.95rem;
+  color: #d6e0f1;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid var(--input-border);
+  background: var(--input);
+  color: white;
+  outline: none;
+  transition: 0.25s ease;
+  font-size: 0.98rem;
+}
+
+.input::placeholder {
+  color: #7890b0;
+}
+
+.input:focus {
+  border-color: rgba(124, 92, 255, 0.65);
+  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.14);
+}
+
+.password-wrap {
+  position: relative;
+}
+
+.password-input {
+  padding-right: 46px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 34px;
+  width: 34px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #b9c9e5;
+  cursor: pointer;
+}
+
+.btn {
+  height: 52px;
+  border: none;
+  border-radius: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background 0.18s ease;
+  font-size: 0.98rem;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+
+.btn-primary {
+  color: white;
+  background: linear-gradient(135deg, var(--primary), #5d7cff);
+}
+
+.btn-secondary {
+  color: white;
+  background: linear-gradient(135deg, #1a2740, #223251);
+  border: 1px solid var(--card-border);
+}
+
+.btn-ghost {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+}
+
+.w-full {
+  width: 100%;
+}
+
+.field-error {
+  margin: -6px 0 0;
+  color: #ff9daf;
+  font-size: 0.88rem;
+}
+
+.server-error,
+.server-success {
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 0.95rem;
+}
+
+.server-error {
+  background: rgba(255, 107, 129, 0.11);
+  border: 1px solid rgba(255, 107, 129, 0.25);
+  color: #ffb2bf;
+}
+
+.server-success {
+  background: rgba(38, 194, 129, 0.12);
+  border: 1px solid rgba(38, 194, 129, 0.26);
+  color: #8ff2c7;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.text-link {
+  font-size: 0.95rem;
+  color: #c8d6ff;
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  margin: 4px 0;
+}
+
+.divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.divider span {
+  position: relative;
+  z-index: 1;
+  background: rgba(14, 24, 40, 0.95);
+  color: var(--muted);
+  padding: 0 12px;
+  font-size: 0.92rem;
+}
+
+.auth-footer {
+  margin-top: 22px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.otp-inline {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 14px;
+  align-items: start;
+}
+
+.otp-field {
+  min-width: 0;
+}
+
+.otp-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 30px;
+}
+
+.otp-message {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #c7d4ea;
+  line-height: 1.5;
+}
+
+.callback-card,
+.dashboard-card {
+  width: 100%;
+  max-width: 720px;
+  padding: 32px;
+  text-align: center;
+}
+
+.dashboard-card {
+  text-align: left;
+}
+
+.dashboard-info {
+  margin-top: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.info-item {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.info-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-bottom: 8px;
+}
+
+.info-item strong {
+  font-size: 1rem;
+}
+
+.dashboard-actions {
+  margin-top: 24px;
+  max-width: 220px;
+}
+
+.spinner {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #8ca6ff;
+  margin: 0 auto 18px;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-hero {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-page,
+  .dashboard-page,
+  .callback-page {
+    padding: 18px;
+  }
+
+  .auth-card,
+  .dashboard-card,
+  .callback-card {
+    border-radius: 22px;
+    padding: 22px;
+  }
+
+  .otp-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .otp-box {
+    padding-top: 0;
+  }
+}
+/* =========================================
+   MOJI DASHBOARD CHAT STYLES
+   ========================================= */
+.moji-dashboard {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 1. Sidebar Hẹp (Toolbar) */
+.moji-sidebar-narrow {
+  width: 76px;
+  background-color: var(--bg-panel) !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0;
+  border-right: 1px solid var(--border-color) !important;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: background-color 0.3s ease;
+}
+
+.moji-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #a855f7;
+  margin-bottom: 32px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.moji-avatar:hover { opacity: 0.8; }
+
+.moji-nav-btn {
+  width: 100%;
+  padding: 16px 0;
+  background: transparent;
+  border: none;
+  border-right: 3px solid transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.moji-nav-btn:hover { color: var(--text-main); }
+.moji-nav-btn.active {
+  color: #c084fc;
+  border-right-color: #a855f7;
+  background-color: var(--hover-bg);
+}
+
+.moji-logout-btn {
+  width: 100%;
+  padding: 16px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.moji-logout-btn:hover { color: #f87171; }
+
+/* 2. Sidebar Rộng (Danh sách Chat & Nhóm) */
+.moji-sidebar-wide {
+  width: 320px;
+  background-color: var(--bg-main) !important;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color) !important;
+  transition: background-color 0.3s ease;
+}
+
+.moji-sidebar-header {
+  padding: 20px;
+}
+
+.moji-logo-text {
+  margin: 0 0 20px 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: linear-gradient(to right, #c084fc, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* --- Thay thế nút Gửi Tin bằng Thanh Search --- */
+.moji-search-container {
+  width: 100%;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.moji-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-sub);
+  width: 18px;
+  height: 18px;
+}
+
+.moji-search-input {
+  width: 100%;
+  background-color: var(--bg-panel) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+  padding: 12px 12px 12px 40px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.moji-search-input::placeholder {
+  color: var(--text-sub);
+}
+
+.moji-search-input:focus {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+  background-color: var(--bg-main) !important;
+}
+
+.moji-chat-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 16px;
+}
+/* Scrollbar tuỳ chỉnh */
+.moji-chat-list-container::-webkit-scrollbar { width: 6px; }
+.moji-chat-list-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+.moji-list-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 8px 8px;
+}
+
+.moji-chat-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 4px;
+}
+.moji-chat-item:hover { background-color: var(--hover-bg); }
+.moji-chat-item.active { background-color: var(--hover-bg); }
+
+.moji-chat-item img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  margin-right: 12px;
+}
+
+.moji-chat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.moji-chat-info-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.moji-chat-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moji-chat-time {
+  font-size: 0.75rem;
+  color: var(--text-sub);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.moji-chat-preview {
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 3. Khu vực Chat chính (Bên phải) */
+.moji-chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background-color: var(--bg-main);
+  border-top-left-radius: 24px;
+  border-bottom-left-radius: 24px;
+  border-left: 1px solid var(--border-color);
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+  transition: background-color 0.3s ease;
+}
+
+.moji-welcome {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+}
+
+.moji-welcome-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(to top right, #a855f7, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 30px rgba(168, 85, 247, 0.3);
+  color: white;
+}
+
+.moji-welcome h2 {
+  font-size: 1.8rem;
+  margin: 0 0 12px 0;
+  background: linear-gradient(to right, #c084fc, #f472b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.moji-welcome p {
+  color: var(--text-sub);
+  max-width: 320px;
+  line-height: 1.6;
+}
+/* =========================================
+   MOJI USER PROFILE STYLES
+   ========================================= */
+.moji-profile-wrapper {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.moji-profile-card {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.moji-profile-cover {
+  height: 120px;
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  position: relative;
+}
+
+.moji-profile-header {
+  padding: 0 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -60px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.moji-profile-avatar-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid var(--bg-panel);
+  background-color: var(--hover-bg);
+  object-fit: cover;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.moji-profile-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 4px 0;
+}
+
+.moji-profile-role {
+  font-size: 0.85rem;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  font-weight: 600;
+  margin: 0;
+}
+
+.moji-profile-body {
+  padding: 32px;
+}
+
+.moji-profile-section-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 16px 0;
+}
+
+.moji-info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.moji-info-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.moji-info-label {
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+
+.moji-info-value {
+  background-color: var(--hover-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Badge trạng thái */
+.moji-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.moji-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981; /* Xanh lá = ACTIVE */
+}
+/* =========================================
+   GIAO DIỆN PROFILE TOÀN MÀN HÌNH (CĂN TRÁI)
+   ========================================= */
+.moji-profile-full {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: var(--bg-main);
+  transition: background-color 0.3s ease;
+}
+
+/* Ảnh bìa */
+.moji-profile-banner {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+}
+
+/* Khu vực Avatar và Tên (Căn trái, hiển thị ngang hàng) */
+.moji-profile-top-section {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  align-items: flex-end; /* Căn đáy để tên ngang với avatar */
+  gap: 24px;
+  margin-top: -60px; /* Đẩy avatar lên đè vào ảnh bìa một chút */
+  margin-bottom: 40px;
+}
+
+.moji-profile-avatar-expansive {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 6px solid var(--bg-main);
+  background-color: var(--bg-panel);
+  object-fit: cover;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+  transition: border-color 0.3s ease;
+}
+
+.moji-profile-header-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 16px; /* Nâng text lên một chút để cân bằng với avatar */
+}
+
+.moji-profile-main-name {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0 0 12px 0;
+  transition: color 0.3s ease;
+}
+
+/* Badge Admin và Trạng thái */
+.moji-profile-badges {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.badge-role {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge-status {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot-active {
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #10b981;
+}
+
+/* Lưới thông tin chi tiết (Tiêu đề ngoài, Text trong bọc) */
+.moji-profile-content {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 40px 60px;
+}
+
+.info-grid-expansive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 28px;
+}
+
+.info-group-expansive {
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* Khoảng cách giữa tiêu đề và bọc thông tin */
+}
+
+.info-card-label {
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  font-weight: 700;
+  padding-left: 4px;
+  transition: color 0.3s ease;
+}
+
+.info-card-value-box {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  padding: 16px 20px;
+  border-radius: 16px;
+  font-size: 1.05rem;
+  color: var(--text-main);
+  transition: all 0.3s ease;
+  font-weight: 500;
+  transition: border-color 0.2s;
+}
+
+.info-card-value-box:hover {
+  border-color: #475569;
+}
+
+/* ==========================================
+   BỘ MÀU SẮC GIAO DIỆN CHAT (LIGHT/DARK MODE)
+   ========================================== */
+:root {
+  /* CHẾ ĐỘ SÁNG (LIGHT MODE) - Mặc định */
+  --bg-main: #f3f4f6;           /* Màu nền chính */
+  --bg-panel: #ffffff;          /* Màu nền các thẻ, header, input */
+  --text-main: #0f172a;         /* Màu chữ chính */
+  --text-sub: #64748b;          /* Màu chữ phụ */
+  --border-color: #e2e8f0;      /* Màu viền */
+  --msg-me-bg: linear-gradient(135deg, #8b5cf6, #d946ef);
+  --msg-other-bg: #ffffff;
+  --msg-other-text: #0f172a;
+  --modal-bg: rgba(255, 255, 255, 0.75); /* Kính mờ sáng */
+  --hover-bg: #f1f5f9;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-modal: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+}
+
+[data-theme='dark'] {
+  /* CHẾ ĐỘ TỐI (DARK MODE) */
+  --bg-main: #0f172a;
+  --bg-panel: #1e293b;
+  --text-main: #f8fafc;
+  --text-sub: #94a3b8;
+  --border-color: #334155;
+  --msg-me-bg: linear-gradient(135deg, #8b5cf6, #d946ef);
+  --msg-other-bg: #1e293b;
+  --msg-other-text: #f8fafc;
+  --modal-bg: rgba(15, 23, 42, 0.75); /* Kính mờ tối */
+  --hover-bg: #334155;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-modal: 0 25px 50px -12px rgba(0,0,0,0.5);
+}
+
+/* Hiệu ứng Kính mờ (Glassmorphism) cực xịn cho các bảng Popup */
+.glass-modal {
+  background: var(--modal-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-modal);
+}
+
+/* Scrollbar đẹp gọn gàng */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-sub); }
+
+/* ==========================================
+   TÍCH HỢP ĐỔI MÀU CHO CỘT SIDEBAR TRÁI
+   ========================================== */
+.moji-sidebar-narrow {
+  background-color: var(--bg-panel) !important;
+  border-right: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.moji-sidebar-wide {
+  background-color: var(--bg-main) !important;
+  border-right: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.moji-sidebar-header {
+  background-color: var(--bg-main) !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.moji-logo-text, .moji-list-title, .moji-chat-name {
+  color: var(--text-main) !important;
+}
+
+.moji-search-input {
+  background-color: var(--bg-panel) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.moji-nav-btn, .moji-logout-btn, .moji-search-icon, .moji-chat-time, .moji-chat-preview {
+  color: var(--text-sub) !important;
+}
+
+.moji-chat-item {
+  border-bottom: 1px solid var(--border-color) !important;
+  transition: background-color 0.2s;
+}
+
+.moji-chat-item:hover, .moji-chat-item.active {
+  background-color: var(--hover-bg) !important;
+}

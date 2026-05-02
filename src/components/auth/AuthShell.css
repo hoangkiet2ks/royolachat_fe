@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* BỐ CỤC TỔNG THỂ */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: 'Inter', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* NỀN VŨ TRỤ (Giữ nguyên màu sáng lung linh như ban đầu) */
+.auth-background {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #0f172a;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.4), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(217, 70, 239, 0.3), transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(59, 130, 246, 0.4), transparent 50%),
+    linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+  z-index: -1;
+}
+
+/* KHUNG CHÍNH (Đã giữ form rộng max 1150px) */
+.auth-container-glass {
+  display: flex;
+  width: 100%;
+  max-width: 1150px; /* Rộng rãi như thiết kế mới */
+  min-height: 650px;
+  background: rgba(255, 255, 255, 0.05); /* Kính mờ phủ nhẹ */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 32px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* CỘT TRÁI (HERO SECTION) */
+.auth-hero {
+  flex: 1.3;
+  padding: 60px 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  position: relative;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 60px;
+}
+
+.logo-icon {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.4);
+}
+
+.hero-title {
+  font-size: 48px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.15;
+  margin-bottom: 24px;
+  letter-spacing: -1.5px;
+}
+
+.hero-subtitle {
+  font-size: 16px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  max-width: 400px;
+}
+
+.hero-illustration {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 20px;
+  padding-bottom: 20px;
+}
+
+.hero-illustration span {
+  font-size: 48px;
+  filter: drop-shadow(0 10px 15px rgba(0,0,0,0.3));
+  animation: float 4s ease-in-out infinite;
+}
+.hero-illustration span:nth-child(2) { animation-delay: 0.5s; font-size: 56px; }
+.hero-illustration span:nth-child(3) { animation-delay: 1s; }
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.hero-footer {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* CỘT PHẢI (FORM ĐĂNG NHẬP) - ĐÃ ĐỔI LẠI THÀNH MÀU SÁNG */
+.auth-form-section {
+  flex: 0 0 460px;
+  padding: 40px 40px 40px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card {
+  background: #ffffff; /* Nền card trắng tinh */
+  width: 100%;
+  border-radius: 24px;
+  padding: 48px 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-card-head {
+  margin-bottom: 32px;
+}
+
+/* CHỮ HIỂN THỊ RÕ RÀNG TRÊN NỀN TRẮNG */
+.auth-card-head h2 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a !important; /* Chữ Đen đậm (Giải quyết lỗi chữ bị ẩn) */
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.auth-card-head p {
+  font-size: 14px;
+  color: #64748b !important; /* Chữ Xám phụ */
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Ô INPUT & NÚT BẤM */
+.auth-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-form-body label {
+  color: #475569; /* Đổi màu chữ Label phía trên input cho dễ nhìn */
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: -10px;
+  display: block;
+}
+
+.auth-form-body input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc; /* Nền input xám nhạt */
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  color: #0f172a;
+  transition: all 0.2s;
+}
+
+.auth-form-body input:focus {
+  border-color: #3b82f6;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.auth-form-body button[type="submit"] {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: #3b82f6;
+  color: white;
+  font-weight: 600;
+  font-size: 15px;
+  border: none;
+  cursor: pointer;
+  margin-top: 16px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: background 0.2s, transform 0.1s;
+}
+
+.auth-form-body button[type="submit"]:hover { background: #2563eb; }
+.auth-form-body button[type="submit"]:active { transform: scale(0.98); }
+
+.auth-footer { margin-top: 24px; }
+.auth-card-copyright { text-align: center; font-size: 13px; color: #94a3b8; margin-top: 32px; }
+
+/* TỐI ƯU MOBILE */
+@media (max-width: 900px) {
+  .auth-container-glass { flex-direction: column; min-height: auto; }
+  .auth-form-section { flex: 1; padding: 24px; width: 100%; }
+  .auth-hero { padding: 40px 30px 20px; }
+  .hero-illustration { display: none; }
+  .brand-logo { margin-bottom: 30px; }
+  .hero-title { font-size: 32px; }
+  .auth-card { padding: 30px 24px; }
+}
+
+/* ==========================================
+   ÉP MÀU TRẮNG CHO CÁC CHỮ BỊ ẨN TRÊN NỀN TỐI
+   ========================================== */
+
+/* 1. Tiêu đề "Đăng nhập" */
+.auth-card-head h2 {
+  color: #ffffff !important; 
+}
+
+/* 2. Chữ "Chào mừng quay lại..." */
+.auth-card-head p {
+  color: #cbd5e1 !important; /* Màu xám sáng cho dễ đọc */
+}
+
+/* 3. Chữ "Chưa có tài khoản?" ở footer */
+.auth-footer p,
+.auth-footer {
+  color: #cbd5e1 !important;
+}
+
+/* 4. Các Link: "Tạo tài khoản" và "Quên mật khẩu?" */
+.auth-footer a, 
+.text-link {
+  color: #ffffff !important; 
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+/* Hiệu ứng rê chuột vào Link sáng lên màu xanh */
+.auth-footer a:hover, 
+.text-link:hover {
+  color: #93c5fd !important; 
+  text-decoration: underline;
+}
