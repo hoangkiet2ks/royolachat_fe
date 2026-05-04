@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { useChatSocket } from '../hooks/useChatSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
