@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import FriendSearch from "../friend/FriendSearch";
 import FriendList from "../friend/FriendList";
 import PendingRequests from "../friend/PendingRequests";
-import SidebarFriendList from "../friend/SidebarFriendList";
 import axios from "axios";
 import { useChatSocket } from "../../hooks/useChatSocket";
 import { friendApi } from "../../features/friend/friend.api";
@@ -12,7 +11,8 @@ import { friendApi } from "../../features/friend/friend.api";
 interface SidebarProps { onSelectChat: (id: string | null) => void; activeId: string | null; onOpenProfile: () => void; }
 
 export default function SideBar({ onSelectChat, activeId, onOpenProfile }: SidebarProps) {
-  const [activeTab, setActiveTab] = useState<"chat" | "friends" | "requests" | "contacts">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "friends" | "requests" | "royola-bot">("chat");
+  const [isBotLoading, setIsBotLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [requestRefreshTrigger, setRequestRefreshTrigger] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
@@ -119,6 +119,29 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
     } catch (error: any) { alert(`Lỗi: ${error.response?.data?.message}`); }
   };
 
+  const handleOpenRoyolaBot = async () => {
+    const botUserId = Number(import.meta.env.VITE_BOT_USER_ID);
+    if (!botUserId) {
+      console.error('[RoyolaBot] VITE_BOT_USER_ID is not set in .env');
+      return;
+    }
+    setIsBotLoading(true);
+    try {
+      const res = await axios.post(
+        `${apiUrl}/chat/conversation/1v1`,
+        { friendId: botUserId },
+        { headers: { Authorization: `Bearer ${session?.accessToken}` } }
+      );
+      clickConversation(res.data.id.toString());
+      setActiveTab("chat");
+    } catch (error: any) {
+      console.error('[RoyolaBot] Failed to open bot conversation:', error);
+      alert(`Lỗi: ${error.response?.data?.message || 'Không thể mở chat với Royola Bot'}`);
+    } finally {
+      setIsBotLoading(false);
+    }
+  };
+
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedMembers.length < 1) return;
     try {
@@ -187,7 +210,28 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
               </span>
             )}
           </button>
-          <button onClick={() => setActiveTab("contacts")} className={`moji-nav-btn ${activeTab === 'contacts' ? 'active' : ''}`} title="Danh sách bạn bè"><svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
+          <button
+            onClick={handleOpenRoyolaBot}
+            className={`moji-nav-btn ${activeTab === 'royola-bot' ? 'active' : ''}`}
+            title="Chat với Royola Bot"
+            disabled={isBotLoading}
+            style={{ position: 'relative' }}
+          >
+            {isBotLoading ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="8" width="18" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 8V6a4 4 0 018 0v2" />
+                <circle cx="9" cy="14" r="1" fill="currentColor" />
+                <circle cx="15" cy="14" r="1" fill="currentColor" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.5c.833-.667 2.167-1 3-1s2.167.333 3 1" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v2M7 3l1 1.5M17 3l-1 1.5" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <button onClick={() => setIsDark(!isDark)} className="moji-nav-btn" style={{ marginBottom: '8px' }} title="Đổi giao diện">
@@ -213,7 +257,6 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
         <div className="moji-chat-list-container">
           {activeTab === "friends" && <div className="flex flex-col h-full"><FriendSearch /><FriendList onStartChat={handleStartChatWithFriend} refreshTrigger={requestRefreshTrigger} /></div>}
           {activeTab === "requests" && <PendingRequests refreshTrigger={requestRefreshTrigger} onRequestHandled={() => { setRequestRefreshTrigger(prev => prev + 1); fetchPendingCount(); }} />}
-          {activeTab === "contacts" && <SidebarFriendList refreshTrigger={requestRefreshTrigger} onStartChat={handleStartChatWithFriend} />}
           {activeTab === "chat" && (
             <div style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px', marginBottom: '12px' }}>

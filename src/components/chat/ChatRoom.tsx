@@ -63,6 +63,20 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [showPinnedList, setShowPinnedList] = useState(false);
 
+  // STATE: Bot typing & Smart Reply (Subtask 8.1, 8.2)
+  const [botTyping, setBotTyping] = useState(false);
+  const [smartReplies, setSmartReplies] = useState<{ messageId: number; replies: string[] } | null>(null);
+  const [smartReplyLoading, setSmartReplyLoading] = useState<number | null>(null);
+  const [smartReplyError, setSmartReplyError] = useState<number | null>(null);
+
+  // STATE: Tone Editor (Subtask 8.3)
+  const [toneMenuVisible, setToneMenuVisible] = useState(false);
+  const [toneMenuPosition, setToneMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const [toneEditLoading, setToneEditLoading] = useState(false);
+  const [toneToastError, setToneToastError] = useState<string | null>(null);
+
   useEffect(() => {
     const handleThemeChange = () => setIsDark(localStorage.getItem('theme') !== 'light');
     window.addEventListener('themeChange', handleThemeChange);
@@ -163,6 +177,10 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
       }));
     };
 
+    // Bot typing handlers (Subtask 8.1)
+    const handleBotTyping = () => setBotTyping(true);
+    const handleBotTypingStop = () => setBotTyping(false);
+
     socket.on('statusAnswer', handleStatusAnswer);
     socket.on('newMessage', handleNewMessage);
     socket.on('messageRecalled', handleMessageRecalled);
@@ -170,6 +188,8 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
     socket.on('userOffline', handleUserOffline);
     socket.on('pinUpdated', handlePinUpdated);
     socket.on('reactionUpdated', handleReactionUpdated);
+    socket.on('botTyping', handleBotTyping);
+    socket.on('botTypingStop', handleBotTypingStop);
 
     return () => {
       socket.off('statusAnswer', handleStatusAnswer);
@@ -179,6 +199,8 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
       socket.off('userOffline', handleUserOffline);
       socket.off('pinUpdated', handlePinUpdated);
       socket.off('reactionUpdated', handleReactionUpdated);
+      socket.off('botTyping', handleBotTyping);
+      socket.off('botTypingStop', handleBotTypingStop);
     };
   }, [socket, chatInfo, conversationId, session?.userId]);
 
@@ -367,6 +389,103 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
       alert("Đã rời nhóm thành công!");
       window.location.reload(); 
     } catch (err: any) { alert(err.response?.data?.message || 'Lỗi khi rời nhóm'); }
+  };
+
+  // ================= SMART REPLY (Subtask 8.2) =================
+  const handleSmartReply = async (messageId: number, content: string) => {
+    if (!token) return;
+    setSmartReplyLoading(messageId);
+    setSmartReplyError(null);
+    setSmartReplies(null);
+
+    const timeoutId = setTimeout(() => {
+      setSmartReplyLoading(null);
+      setSmartReplyError(messageId);
+      setTimeout(() => setSmartReplyError(null), 3000);
+    }, 5000);
+
+    try {
+      const res = await axios.post(
+        `${apiUrl}/ai/smart-reply`,
+        { messageContent: content },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      clearTimeout(timeoutId);
+      const suggestions: string[] = res.data.suggestions || [];
+      setSmartReplies({ messageId, replies: suggestions.slice(0, 3) });
+    } catch {
+      clearTimeout(timeoutId);
+      setSmartReplyLoading(null);
+      setSmartReplyError(messageId);
+      setTimeout(() => setSmartReplyError(null), 3000);
+    } finally {
+      setSmartReplyLoading(null);
+    }
+  };
+
+  // ================= TONE EDITOR (Subtask 8.3) =================
+  const shouldShowToneEditor = (text: string): boolean => text.length >= 5 && text.length <= 2000;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleTextareaMouseUp = (e: React.MouseEvent<HTMLInputElement>) => {
+    // Dùng setTimeout để đảm bảo browser đã cập nhật selection
+    setTimeout(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      const start = input.selectionStart ?? 0;
+      const end = input.selectionEnd ?? 0;
+      if (start === end) {
+        setToneMenuVisible(false);
+        return;
+      }
+      const selected = inputText.substring(start, end);
+      if (shouldShowToneEditor(selected)) {
+        setSelectedText(selected);
+        setSelectionRange({ start, end });
+        // Tính vị trí menu dựa trên mouse event
+        const rect = input.getBoundingClientRect();
+        setToneMenuPosition({
+          x: Math.min(e.clientX, window.innerWidth - 280),
+          y: rect.top - 56,
+        });
+        setToneMenuVisible(true);
+      } else {
+        setToneMenuVisible(false);
+      }
+    }, 10);
+  };
+
+  const handleToneEdit = async (mode: 'polite' | 'grammar') => {
+    if (!token || !selectionRange) return;
+    setToneEditLoading(true);
+    setToneMenuVisible(false);
+
+    const timeoutId = setTimeout(() => {
+      setToneEditLoading(false);
+      setToneToastError('Không thể chỉnh sửa, vui lòng thử lại.');
+      setTimeout(() => setToneToastError(null), 3000);
+    }, 10000);
+
+    try {
+      const res = await axios.post(
+        `${apiUrl}/ai/tone-edit`,
+        { text: selectedText, mode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      clearTimeout(timeoutId);
+      const result: string = res.data.result || selectedText;
+      setInputText(prev =>
+        prev.substring(0, selectionRange.start) + result + prev.substring(selectionRange.end)
+      );
+    } catch {
+      clearTimeout(timeoutId);
+      setToneToastError('Không thể chỉnh sửa, vui lòng thử lại.');
+      setTimeout(() => setToneToastError(null), 3000);
+    } finally {
+      setToneEditLoading(false);
+      setSelectionRange(null);
+      setSelectedText('');
+    }
   };
 
   // Tự động lọc mảng chứa Ảnh/Video và File
@@ -609,6 +728,71 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
                       {msg.reactions.length > 1 && <span style={{ marginLeft: '4px', fontWeight: 600, color: 'var(--text-sub)' }}>{msg.reactions.length}</span>}
                     </div>
                   )}
+
+                  {/* SMART REPLY BUTTON (Subtask 8.2) — chỉ hiển thị cho tin nhắn TEXT từ đối phương, không phải bot */}
+                  {!isMe && !isMsgRecalled && msg.type === 'TEXT' && msg.sender && !(msg.sender as any).isBot && (
+                    <div style={{ marginTop: msg.reactions && msg.reactions.length > 0 ? '20px' : '6px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+                      {/* Nút gợi ý */}
+                      <button
+                        onClick={() => handleSmartReply(msg.id, msg.content)}
+                        disabled={smartReplyLoading === msg.id}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--border-color)',
+                          color: smartReplyError === msg.id ? '#ef4444' : 'var(--text-sub)',
+                          borderColor: smartReplyError === msg.id ? '#ef4444' : 'var(--border-color)',
+                          borderRadius: '12px',
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          cursor: smartReplyLoading === msg.id ? 'wait' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {smartReplyLoading === msg.id ? (
+                          <>
+                            <div style={{ width: '10px', height: '10px', border: '2px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                            Đang tải...
+                          </>
+                        ) : smartReplyError === msg.id ? (
+                          '⚠️ Thử lại'
+                        ) : (
+                          '💡 Gợi ý trả lời'
+                        )}
+                      </button>
+
+                      {/* Các nút gợi ý sau khi nhận response */}
+                      {smartReplies && smartReplies.messageId === msg.id && smartReplies.replies.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {smartReplies.replies.map((reply, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => { setInputText(reply); setSmartReplies(null); }}
+                              style={{
+                                background: 'rgba(139,92,246,0.08)',
+                                border: '1px solid rgba(139,92,246,0.3)',
+                                color: '#8b5cf6',
+                                borderRadius: '12px',
+                                padding: '5px 12px',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                fontWeight: 500,
+                                transition: 'all 0.2s',
+                                maxWidth: '200px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {reply}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -616,14 +800,83 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* BOT TYPING INDICATOR (Subtask 8.1) */}
+        {botTyping && (
+          <div style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '14px', flexShrink: 0 }}>🤖</div>
+            <div style={{ background: 'var(--msg-other-bg)', border: '1px solid var(--border-color)', borderRadius: '20px', borderBottomLeftRadius: '4px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-sub)', fontStyle: 'italic' }}>Royola Bot đang nhập...</span>
+              <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#8b5cf6', animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Ô NHẬP TIN NHẮN */}
         <div style={{ padding: '20px 24px', background: 'var(--bg-panel)', borderTop: '1px solid var(--border-color)', position: 'relative', zIndex: 10 }}>
           {showEmoji && <div style={{ position: 'absolute', bottom: '80px', right: '40px', zIndex: 50, boxShadow: 'var(--shadow-modal)', borderRadius: '12px' }}><EmojiPicker onEmojiClick={(e) => setInputText(prev => prev + e.emoji)} theme={isDark ? "dark" as any : "light" as any} /></div>}
+          
+          {/* TONE EDITOR FLOATING MENU (Subtask 8.3) */}
+          {toneMenuVisible && (
+            <div
+              style={{
+                position: 'fixed',
+                left: toneMenuPosition.x,
+                top: toneMenuPosition.y,
+                zIndex: 1000,
+                background: 'var(--bg-panel)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                display: 'flex',
+                gap: '6px',
+                padding: '6px',
+                animation: 'fadeIn 0.15s ease',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <button
+                onClick={() => handleToneEdit('polite')}
+                disabled={toneEditLoading}
+                style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', color: '#8b5cf6', borderRadius: '8px', padding: '6px 12px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                {toneEditLoading ? '...' : '🎩 Lịch sự hơn'}
+              </button>
+              <button
+                onClick={() => handleToneEdit('grammar')}
+                disabled={toneEditLoading}
+                style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '6px 12px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                {toneEditLoading ? '...' : '✏️ Sửa lỗi ngữ pháp'}
+              </button>
+            </div>
+          )}
+
+          {/* TONE TOAST ERROR */}
+          {toneToastError && (
+            <div style={{ position: 'absolute', bottom: '90px', left: '50%', transform: 'translateX(-50%)', background: '#ef4444', color: '#fff', padding: '8px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 500, zIndex: 100, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(239,68,68,0.3)' }}>
+              {toneToastError}
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
             <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '12px', transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
             {isUploading && <span style={{ fontSize: '13px', color: '#8b5cf6', marginRight: '12px', whiteSpace: 'nowrap', fontWeight: 500 }}>Đang tải...</span>}
-            <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="Nhập tin nhắn của bạn..." style={{ flex: 1, border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '1rem' }} />
+            <input
+              type="text"
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              onMouseUp={handleTextareaMouseUp}
+              onBlur={() => { if (!toneEditLoading) setTimeout(() => setToneMenuVisible(false), 150); }}
+              placeholder="Nhập tin nhắn của bạn..."
+              style={{ flex: 1, border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '1rem' }}
+            />
             <svg onClick={() => setShowEmoji(!showEmoji)} style={{ color: showEmoji ? '#8b5cf6' : 'var(--text-sub)', cursor: 'pointer', margin: '0 16px', transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
           </div>
