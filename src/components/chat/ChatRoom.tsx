@@ -12,9 +12,9 @@ interface ChatInfo { id: number; isGroup: boolean; name: string; avatar: string 
 interface PendingRequest { id: number; user: { id: number; name: string; avatar: string | null }; inviter: { id: number; name: string; avatar: string | null }; }
 interface ForwardTarget { targetId: string; name: string; avatar: string; isGroup: boolean; convId: number | null; friendId: number | null; }
 
-interface ChatRoomProps { conversationId: number; }
+interface ChatRoomProps { conversationId: number; onToggleSidebar?: () => void; sidebarCollapsed?: boolean; }
 
-export default function ChatRoom({ conversationId }: ChatRoomProps) {
+export default function ChatRoom({ conversationId, onToggleSidebar, sidebarCollapsed }: ChatRoomProps) {
   const { session } = useAuth();
   const token = session?.accessToken || null; 
   const { socket, webrtc, groupCall, setActiveGroupName } = useCall();
@@ -524,6 +524,26 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
           </div>
 
           <div style={{ display: 'flex', gap: '16px', color: 'var(--text-sub)', alignItems: 'center' }}>
+            {/* Nút ẩn/hiện sidebar */}
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                title={sidebarCollapsed ? "Hiện thanh bên" : "Ẩn thanh bên"}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '8px', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover-bg)'; e.currentTarget.style.color = 'var(--text-main)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-sub)'; }}
+              >
+                {sidebarCollapsed ? (
+                  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                ) : (
+                  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+                  </svg>
+                )}
+              </button>
+            )}
             <svg onClick={() => handleStartCall('audio')} style={{ cursor: 'pointer' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
             <svg onClick={() => handleStartCall('video')} style={{ cursor: 'pointer' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             <svg onClick={() => setShowInfoPanel(!showInfoPanel)} style={{ cursor: 'pointer', color: showInfoPanel ? '#8b5cf6' : 'currentColor', background: showInfoPanel ? 'rgba(139,92,246,0.1)' : 'transparent', padding: '4px', borderRadius: '8px', transition: 'all 0.2s' }} width="28" height="28" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" /></svg>
@@ -816,7 +836,7 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
         )}
 
         {/* Ô NHẬP TIN NHẮN */}
-        <div style={{ padding: '20px 24px', background: 'var(--bg-panel)', borderTop: '1px solid var(--border-color)', position: 'relative', zIndex: 10 }}>
+        <div className="moji-input-area" style={{ padding: '16px 20px', background: 'var(--bg-panel)', borderTop: '1px solid var(--border-color)', position: 'relative', zIndex: 10 }}>
           {showEmoji && <div style={{ position: 'absolute', bottom: '80px', right: '40px', zIndex: 50, boxShadow: 'var(--shadow-modal)', borderRadius: '12px' }}><EmojiPicker onEmojiClick={(e) => setInputText(prev => prev + e.emoji)} theme={isDark ? "dark" as any : "light" as any} /></div>}
           
           {/* TONE EDITOR FLOATING MENU (Subtask 8.3) */}
@@ -862,10 +882,10 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
+          <div className="moji-chat-input-row" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
-            <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '12px', transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-            {isUploading && <span style={{ fontSize: '13px', color: '#8b5cf6', marginRight: '12px', whiteSpace: 'nowrap', fontWeight: 500 }}>Đang tải...</span>}
+            <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+            {isUploading && <span style={{ fontSize: '13px', color: '#8b5cf6', marginRight: '8px', whiteSpace: 'nowrap', fontWeight: 500 }}>Đang tải...</span>}
             <input
               type="text"
               ref={inputRef}
@@ -875,10 +895,10 @@ export default function ChatRoom({ conversationId }: ChatRoomProps) {
               onMouseUp={handleTextareaMouseUp}
               onBlur={() => { if (!toneEditLoading) setTimeout(() => setToneMenuVisible(false), 150); }}
               placeholder="Nhập tin nhắn của bạn..."
-              style={{ flex: 1, border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '1rem' }}
+              style={{ flex: 1, border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '1rem', minWidth: 0 }}
             />
-            <svg onClick={() => setShowEmoji(!showEmoji)} style={{ color: showEmoji ? '#8b5cf6' : 'var(--text-sub)', cursor: 'pointer', margin: '0 16px', transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+            <svg className="emoji-hide-mobile" onClick={() => setShowEmoji(!showEmoji)} style={{ color: showEmoji ? '#8b5cf6' : 'var(--text-sub)', cursor: 'pointer', margin: '0 8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
           </div>
         </div>
       </div>

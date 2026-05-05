@@ -11,6 +11,7 @@ import { friendApi } from "../../features/friend/friend.api";
 interface SidebarProps { onSelectChat: (id: string | null) => void; activeId: string | null; onOpenProfile: () => void; }
 
 export default function SideBar({ onSelectChat, activeId, onOpenProfile }: SidebarProps) {
+  const [mobileListOpen, setMobileListOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "friends" | "requests" | "royola-bot">("chat");
   const [isBotLoading, setIsBotLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -151,7 +152,11 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
   };
 
   const toggleMemberSelection = (friendId: number) => setSelectedMembers(prev => prev.includes(friendId) ? prev.filter(id => id !== friendId) : [...prev, friendId]);
-  const clickConversation = (id: string) => { setUnreadCounts(prev => ({ ...prev, [id]: 0 })); onSelectChat(id); };
+  const clickConversation = (id: string) => {
+    setUnreadCounts(prev => ({ ...prev, [id]: 0 }));
+    onSelectChat(id);
+    setMobileListOpen(false); // Đóng danh sách sau khi chọn chat trên mobile
+  };
 
   const filteredConversations = useMemo(() => {
     // Đảm bảo conversations là array trước khi filter
@@ -197,12 +202,49 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
         )}
         <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           
-          <button onClick={() => setActiveTab("chat")} className={`moji-nav-btn ${activeTab === 'chat' ? 'active' : ''}`} style={{ position: 'relative' }} title="Tin nhắn">
+          <button
+            onClick={() => {
+              if (activeTab === 'chat') {
+                setMobileListOpen(prev => !prev);
+              } else {
+                setActiveTab("chat");
+                setMobileListOpen(true);
+              }
+            }}
+            className={`moji-nav-btn ${activeTab === 'chat' ? 'active' : ''}`}
+            style={{ position: 'relative' }}
+            title="Tin nhắn"
+          >
             <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" /></svg>
             {totalUnread > 0 && <span style={{ position: 'absolute', top: '2px', right: '4px', background: '#ef4444', color: '#fff', fontSize: '10px', fontWeight: 'bold', borderRadius: '10px', padding: '2px 5px', border: '2px solid var(--bg-panel)' }}>{totalUnread > 99 ? '99+' : totalUnread}</span>}
           </button>
-          <button onClick={() => setActiveTab("friends")} className={`moji-nav-btn ${activeTab === 'friends' ? 'active' : ''}`} title="Kết bạn"><svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg></button>
-          <button onClick={() => setActiveTab("requests")} className={`moji-nav-btn ${activeTab === 'requests' ? 'active' : ''}`} title="Lời mời kết bạn" style={{ position: 'relative' }}>
+          <button
+            onClick={() => {
+              if (activeTab === 'friends') {
+                setMobileListOpen(prev => !prev);
+              } else {
+                setActiveTab("friends");
+                setMobileListOpen(true);
+              }
+            }}
+            className={`moji-nav-btn ${activeTab === 'friends' ? 'active' : ''}`}
+            title="Kết bạn"
+          >
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+          </button>
+          <button
+            onClick={() => {
+              if (activeTab === 'requests') {
+                setMobileListOpen(prev => !prev);
+              } else {
+                setActiveTab("requests");
+                setMobileListOpen(true);
+              }
+            }}
+            className={`moji-nav-btn ${activeTab === 'requests' ? 'active' : ''}`}
+            title="Lời mời kết bạn"
+            style={{ position: 'relative' }}
+          >
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             {pendingCount > 0 && activeTab !== 'requests' && (
               <span style={{ position: 'absolute', top: '2px', right: '4px', background: '#ef4444', color: '#fff', fontSize: '10px', fontWeight: 'bold', borderRadius: '10px', padding: '2px 5px', border: '2px solid var(--bg-panel)', minWidth: '18px', textAlign: 'center', lineHeight: '14px' }}>
@@ -245,9 +287,21 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
         <button onClick={handleLogout} className="moji-logout-btn" title="Đăng xuất"><svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg></button>
       </div>
 
-      <div className="moji-sidebar-wide">
+      <div className={`moji-sidebar-wide${mobileListOpen ? ' mobile-open' : ''}`}>
         <div className="moji-sidebar-header">
-          <h1 className="moji-logo-text">Royola Chat</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h1 className="moji-logo-text" style={{ margin: 0 }}>Royola Chat</h1>
+            {/* Nút đóng danh sách — chỉ hiện trên mobile */}
+            <button
+              className="moji-mobile-close-btn"
+              onClick={() => setMobileListOpen(false)}
+              title="Đóng"
+            >
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <div className="moji-search-container">
             <svg className="moji-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input type="text" placeholder="Tìm kiếm trò chuyện..." className="moji-search-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />

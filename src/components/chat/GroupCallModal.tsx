@@ -152,15 +152,18 @@ export default function GroupCallModal({
 
       {/* Video Grid - chỉ hiện khi không phải incoming */}
       {callState !== 'incoming' && (
-        <div style={{ flex: 1, padding: '16px', overflowY: 'auto' }}>
+        <div style={{ flex: 1, padding: '8px', overflowY: 'auto', overflowX: 'hidden' }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: allParticipants.length === 0
+            // Mobile: 1 cột dọc; Desktop: auto-fit
+            gridTemplateColumns: window.innerWidth <= 600
               ? '1fr'
-              : allParticipants.length === 1
-                ? 'repeat(2, 1fr)'
-                : 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '12px',
+              : allParticipants.length === 0
+                ? '1fr'
+                : allParticipants.length === 1
+                  ? 'repeat(2, 1fr)'
+                  : 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '8px',
             maxWidth: '1400px',
             margin: '0 auto',
           }}>
@@ -194,7 +197,9 @@ export default function GroupCallModal({
       {/* Controls */}
       {callState === 'connected' && (
         <div style={{
-          padding: '16px', background: 'rgba(0,0,0,0.7)',
+          padding: '16px',
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+          background: 'rgba(0,0,0,0.7)',
           display: 'flex', justifyContent: 'center', gap: '20px',
           borderTop: '1px solid rgba(255,255,255,0.1)',
         }}>

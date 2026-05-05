@@ -12,6 +12,11 @@
   --input: rgba(255, 255, 255, 0.06);
   --input-border: rgba(255, 255, 255, 0.08);
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  /* Safe area insets cho notch/navigation bar */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   font-family:
     Inter,
     ui-sans-serif,
@@ -24,6 +29,25 @@
 
 * {
   box-sizing: border-box;
+  /* Tắt text selection trên các element UI để tránh bôi đen vô tình khi scroll */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Loại bỏ outline mặc định trên mobile, thay bằng :active feedback */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* Tắt double-tap zoom trên các element tương tác */
+}
+
+button:active, a:active, [role="button"]:active {
+  opacity: 0.75;
+  transform: scale(0.97);
+}
+
+/* Đảm bảo tất cả button có touch target tối thiểu 48x48px */
+button {
+  min-height: 44px;
+  min-width: 44px;
 }
 
 html,
@@ -446,11 +470,17 @@ a:hover {
 .moji-dashboard {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport height — tránh bị che bởi browser chrome trên mobile */
   width: 100vw;
   overflow: hidden;
   background-color: var(--bg-main);
   color: var(--text-main);
   transition: background-color 0.3s ease, color 0.3s ease;
+  /* Safe area cho notch và navigation bar */
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 
 /* 1. Sidebar Hẹp (Toolbar) */
@@ -671,6 +701,30 @@ a:hover {
   justify-content: center;
   text-align: center;
   padding: 32px;
+  position: relative; /* Để nút toggle absolute hoạt động */
+}
+
+/* Nút ẩn/hiện sidebar trên màn hình welcome */
+.moji-sidebar-toggle-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.moji-sidebar-toggle-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-main);
 }
 
 .moji-welcome-icon {
@@ -834,6 +888,7 @@ a:hover {
   overflow-y: auto;
   background-color: var(--bg-main);
   transition: background-color 0.3s ease;
+  position: relative; /* Để nút toggle absolute hoạt động */
 }
 
 /* Ảnh bìa */
@@ -1056,4 +1111,160 @@ a:hover {
 
 .moji-chat-item:hover, .moji-chat-item.active {
   background-color: var(--hover-bg) !important;
+}
+
+/* ==========================================
+   MOBILE / ANDROID OPTIMIZATIONS
+   ========================================== */
+
+/* Tắt hover trên thiết bị cảm ứng — tránh lỗi chạm 2 lần */
+@media (hover: none) and (pointer: coarse) {
+  .moji-nav-btn:hover,
+  .moji-logout-btn:hover,
+  .moji-chat-item:hover,
+  .btn:hover,
+  button:hover,
+  a:hover {
+    /* Reset tất cả hover effects */
+    opacity: 1;
+    transform: none;
+    background-color: inherit;
+    color: inherit;
+  }
+
+  /* Thay bằng :active feedback */
+  .moji-nav-btn:active { background-color: var(--hover-bg) !important; }
+  .moji-chat-item:active { background-color: var(--hover-bg) !important; }
+  .btn:active { opacity: 0.8; transform: scale(0.98); }
+
+  /* Tắt text selection trên UI elements */
+  .moji-sidebar-narrow,
+  .moji-sidebar-wide,
+  .moji-chat-name,
+  .moji-logo-text,
+  .moji-list-title {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Tăng touch target cho các nút nhỏ */
+  .moji-nav-btn {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  .moji-logout-btn {
+    min-height: 48px;
+    min-width: 48px;
+  }
+}
+
+/* Responsive layout cho màn hình nhỏ (mobile) */
+@media (max-width: 600px) {
+  /* Sidebar hẹp hơn trên mobile */
+  .moji-sidebar-narrow {
+    width: 60px;
+  }
+
+  /* Sidebar rộng chiếm toàn màn hình khi active */
+  .moji-sidebar-wide {
+    width: 100vw;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .moji-sidebar-wide.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Nút đóng danh sách — chỉ hiện trên mobile */
+  .moji-mobile-close-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-sub);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    transition: background 0.2s;
+  }
+  .moji-mobile-close-btn:hover {
+    background: var(--hover-bg);
+  }
+
+  /* Profile responsive trên mobile */
+  .moji-profile-top-section {
+    padding: 0 16px !important;
+    gap: 12px !important;
+    margin-top: -50px !important;
+    margin-bottom: 24px !important;
+    flex-wrap: wrap;
+  }
+
+  .moji-profile-avatar-expansive {
+    width: 90px !important;
+    height: 90px !important;
+  }
+
+  .moji-profile-main-name {
+    font-size: 1.4rem !important;
+  }
+
+  .moji-profile-content {
+    padding: 0 16px 40px !important;
+  }
+
+  .info-grid-expansive {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .moji-profile-banner {
+    height: 160px !important;
+  }
+
+  /* Ô nhập tin nhắn — padding bottom cho navigation bar */
+  .moji-input-area {
+    padding-bottom: calc(20px + var(--safe-bottom));
+  }
+
+  /* Input area mobile: thu gọn để nút gửi không bị cắt */
+  .moji-chat-input-row {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .moji-chat-input-row .emoji-hide-mobile {
+    display: none !important;
+  }
+
+  /* Header — padding top cho notch */
+  .moji-chat-header {
+    padding-top: calc(16px + var(--safe-top));
+  }
+}
+
+/* Nút đóng ẩn trên desktop */
+.moji-mobile-close-btn {
+  display: none;
+}
+
+/* Ngăn scroll bounce trên iOS WebView */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Smooth scroll cho danh sách tin nhắn */
+.moji-chat-list-container,
+[style*="overflow-y: auto"] {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
