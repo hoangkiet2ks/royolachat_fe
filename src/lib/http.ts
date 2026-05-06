@@ -5,7 +5,7 @@ import {
   setStoredSession,
 } from "./storage";
 
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const baseURL = "https://18.141.211.167.nip.io"; // Hardcode để chắc chắn
 
 export const http = axios.create({
   baseURL,
