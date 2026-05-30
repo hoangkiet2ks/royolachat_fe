@@ -85,7 +85,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const [toneToastError, setToneToastError] = useState<string | null>(null);
 
   const [typingUsers, setTypingUsers] = useState<{ id: number, name: string }[]>([]);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   // STATE TÍNH NĂNG REPLY
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -1135,7 +1135,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           <div className="moji-chat-input-row" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
             <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-            <svg onClick={() => setShowCreatePollModal(true)} title="Tạo bình chọn" style={{ color: 'var(--text-sub)', cursor: 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            <svg onClick={() => setShowCreatePollModal(true)} aria-label="Tạo bình chọn" style={{ color: 'var(--text-sub)', cursor: 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             {isUploading && <span style={{ fontSize: '13px', color: '#8b5cf6', marginRight: '8px', whiteSpace: 'nowrap', fontWeight: 500 }}>Đang tải...</span>}
 
             <input

@@ -33,13 +33,11 @@ export default function CallModal({
   const [isMuted, setIsMuted] = useState(false);
   const [isCamOff, setIsCamOff] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [callingTimeout, setCallingTimeout] = useState(false);
 
   // Timeout 15s khi đang gọi chờ đối phương bắt máy
   useEffect(() => {
-    if (callState !== 'calling') { setCallingTimeout(false); return; }
+    if (callState !== 'calling') { return; }
     const timer = setTimeout(() => {
-      setCallingTimeout(true);
       onEnd(); // Tự động kết thúc sau 15s
     }, 15000);
     return () => clearTimeout(timer);

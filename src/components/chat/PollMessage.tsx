@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Check, Users } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export interface PollVote {
   id: number;

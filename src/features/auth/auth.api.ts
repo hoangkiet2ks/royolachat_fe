@@ -10,6 +10,7 @@ import type {
   UpdatePhoneResponse,
   TwoFactorSetupResponse,
   DisableTwoFactorBody,
+  UserResponse,
 } from "./auth.types";
 
 export const authApi = {

@@ -41,14 +41,11 @@ export default function GroupCallModal({
   const [elapsed, setElapsed] = useState(0);
   // Track userId nào đã hết timeout 15s (chưa tham gia) → ẩn tile
   const [timedOutUsers, setTimedOutUsers] = useState<Set<number>>(new Set());
-  // Timeout 15s cho incoming call
-  const [incomingExpired, setIncomingExpired] = useState(false);
 
   // Timeout 15s: tự động từ chối nếu không tham gia
   useEffect(() => {
-    if (callState !== 'incoming') { setIncomingExpired(false); return; }
+    if (callState !== 'incoming') { return; }
     const timer = setTimeout(() => {
-      setIncomingExpired(true);
       onReject();
     }, 15000);
     return () => clearTimeout(timer);

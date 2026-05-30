@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, RefObject } from "react";
 import clsx from "clsx";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -8,6 +8,10 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost";
 };
 
+interface ButtonWithRefProps extends Props {
+  ref?: RefObject<HTMLButtonElement | null>;
+}
+
 export default function Button({
   children,
   loading,
@@ -15,10 +19,12 @@ export default function Button({
   variant = "primary",
   className,
   disabled,
+  ref,
   ...props
-}: Props) {
+}: ButtonWithRefProps) {
   return (
     <button
+      ref={ref}
       className={clsx(
         "btn",
         `btn-${variant}`,

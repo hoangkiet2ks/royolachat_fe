@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Settings } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 
 interface CreatePollModalProps {
   isOpen: boolean;
