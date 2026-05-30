@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { authApi } from "../features/auth/auth.api";
+import { setStoredSession } from "../lib/storage";
 
 export default function OAuthGoogleCallbackPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { setSession } = useAuth();
+  const calledRef = useRef(false);
 
   // 1. Lấy data trực tiếp từ params
   const accessToken = params.get("accessToken");
@@ -23,14 +26,39 @@ export default function OAuthGoogleCallbackPage() {
 
   // 3. Chỉ dùng useEffect cho việc chuyển trang và lưu dữ liệu (Side-effects)
   useEffect(() => {
+    if (calledRef.current) return;
+
     if (!errorMessage && accessToken && refreshToken && userId) {
-      setSession({
+      calledRef.current = true;
+
+      const basicSession = {
         accessToken,
         refreshToken,
         userId: Number(userId),
-      });
+      };
 
-      navigate("/dashboard", { replace: true });
+      // Tạm thời lưu token vào storage để authApi có thể dùng
+      setStoredSession(basicSession);
+
+      // Fetch thêm thông tin user
+      authApi.getCurrentUser()
+        .then((res) => {
+          const data = res.data as any;
+          setSession({
+            ...basicSession,
+            name: data.name,
+            email: data.email,
+            avatar: data.avatar,
+            phoneNumber: data.phoneNumber,
+            is2FAEnabled: data.is2FAEnabled,
+          });
+          navigate("/dashboard", { replace: true });
+        })
+        .catch(() => {
+          // Fallback nếu có lỗi lấy thông tin
+          setSession(basicSession);
+          navigate("/dashboard", { replace: true });
+        });
     }
   }, [errorMessage, accessToken, refreshToken, userId, navigate, setSession]);
 

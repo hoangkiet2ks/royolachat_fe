@@ -20,6 +20,7 @@ interface GroupCallModalProps {
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
+  onEnableCamera?: () => void; // Bật cam trong audio call nhóm
   groupName: string;
 }
 
@@ -32,16 +33,55 @@ export default function GroupCallModal({
   onAccept,
   onReject,
   onEnd,
+  onEnableCamera,
   groupName,
 }: GroupCallModalProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCamOff, setIsCamOff] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  // Track userId nào đã hết timeout 15s (chưa tham gia) → ẩn tile
+  const [timedOutUsers, setTimedOutUsers] = useState<Set<number>>(new Set());
+  // Timeout 15s cho incoming call
+  const [incomingExpired, setIncomingExpired] = useState(false);
+
+  // Timeout 15s: tự động từ chối nếu không tham gia
+  useEffect(() => {
+    if (callState !== 'incoming') { setIncomingExpired(false); return; }
+    const timer = setTimeout(() => {
+      setIncomingExpired(true);
+      onReject();
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [callState, onReject]);
+
+  // Timeout 15s cho từng pending participant — xóa tile nếu không tham gia
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    participants.forEach(p => {
+      if (!p.isJoined && !timedOutUsers.has(p.userId)) {
+        const t = setTimeout(() => {
+          setTimedOutUsers(prev => new Set(prev).add(p.userId));
+        }, 15000);
+        timers.push(t);
+      }
+    });
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participants.map(p => p.userId).join(',')]);
+
+  // Reset timedOut khi participant thực sự join
+  useEffect(() => {
+    participants.forEach(p => {
+      if (p.isJoined && timedOutUsers.has(p.userId)) {
+        setTimedOutUsers(prev => { const s = new Set(prev); s.delete(p.userId); return s; });
+      }
+    });
+  }, [participants, timedOutUsers]);
 
   const joinedParticipants = participants.filter(p => p.isJoined);
   const totalParticipants = joinedParticipants.length + 1; // +1 là bản thân
-  // Hiển thị tất cả participants - người chưa join sẽ mờ 50%
-  const allParticipants = participants;
+  // Ẩn tile của người đã hết 15s mà không tham gia
+  const allParticipants = participants.filter(p => !timedOutUsers.has(p.userId));
 
   // Debug log
   useEffect(() => {
@@ -204,8 +244,13 @@ export default function GroupCallModal({
           borderTop: '1px solid rgba(255,255,255,0.1)',
         }}>
           <ControlBtn icon={isMuted ? micOffIcon : micIcon} onClick={toggleMute} active={isMuted} />
-          {callType === 'video' && (
+          {callType === 'video' ? (
             <ControlBtn icon={isCamOff ? camOffIcon : camIcon} onClick={toggleCam} active={isCamOff} />
+          ) : (
+            // Nút bật cam trong audio call — chỉ người ấn mới bật cam của họ
+            onEnableCamera && (
+              <ControlBtn icon={camIcon} onClick={onEnableCamera} color="#10b981" title="Bật camera" />
+            )
           )}
           <ControlBtn icon={endIcon} onClick={onEnd} color="#ef4444" />
         </div>
@@ -231,12 +276,31 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
   isCamOff?: boolean;
   callType: 'audio' | 'video';
   isSpeaking?: boolean;
-  isPending?: boolean; // Người chưa tham gia cuộc gọi
+  isPending?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Detect có video track trong stream không — độc lập với callType
+  // Dùng state để re-render khi stream thay đổi track
+  const [hasVideoTrack, setHasVideoTrack] = useState(false);
 
-  // Gán stream vào video element - không dùng conditional render
+  useEffect(() => {
+    if (!stream) { setHasVideoTrack(false); return; }
+    const checkVideo = () => {
+      const videoTracks = stream.getVideoTracks();
+      setHasVideoTrack(videoTracks.length > 0 && videoTracks.some(t => t.enabled && t.readyState === 'live'));
+    };
+    checkVideo();
+    // Lắng nghe khi track được thêm vào stream (renegotiation)
+    stream.addEventListener('addtrack', checkVideo);
+    stream.addEventListener('removetrack', checkVideo);
+    return () => {
+      stream.removeEventListener('addtrack', checkVideo);
+      stream.removeEventListener('removetrack', checkVideo);
+    };
+  }, [stream]);
+
+  // Gán stream vào video element
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -259,7 +323,11 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
     }
   }, [stream, isLocal]);
 
-  const showAvatar = callType === 'audio' || isCamOff || !stream;
+  // Hiện avatar khi: không có video track, hoặc cam bị tắt, hoặc không có stream
+  const showVideo = hasVideoTrack && !isCamOff && !!stream;
+  const showAvatar = !showVideo;
+  // Tỉ lệ tile: 16/9 nếu có video, vuông nếu chỉ audio
+  const tileAspect = showVideo || callType === 'video' ? '16/9' : '1/1';
 
   return (
     <div style={{
@@ -267,7 +335,7 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
       background: 'linear-gradient(135deg, #1e293b, #334155)',
       borderRadius: '16px',
       overflow: 'hidden',
-      aspectRatio: callType === 'video' ? '16/9' : '1/1',
+      aspectRatio: tileAspect,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -278,7 +346,7 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
       transition: 'border 0.2s, box-shadow 0.2s, opacity 0.3s',
       opacity: isPending ? 0.45 : 1,
     }}>
-      {/* Video element luôn tồn tại, chỉ ẩn khi cần */}
+      {/* Video element — hiện khi có video track live */}
       <video
         ref={videoRef}
         autoPlay
@@ -288,7 +356,7 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
           position: 'absolute', inset: 0,
           width: '100%', height: '100%',
           objectFit: 'cover',
-          display: callType === 'video' && !isCamOff && stream ? 'block' : 'none',
+          display: showVideo ? 'block' : 'none',
         }}
       />
 
@@ -393,11 +461,11 @@ function VideoTile({ name, avatar, stream, isLocal, isMuted, isCamOff, callType,
   );
 }
 
-function ControlBtn({ icon, onClick, active, color }: {
-  icon: React.ReactNode; onClick: () => void; active?: boolean; color?: string;
+function ControlBtn({ icon, onClick, active, color, title }: {
+  icon: React.ReactNode; onClick: () => void; active?: boolean; color?: string; title?: string;
 }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} title={title} style={{
       width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
       background: active ? 'rgba(239,68,68,0.25)' : (color || '#374151'),
       display: 'flex', alignItems: 'center', justifyContent: 'center',

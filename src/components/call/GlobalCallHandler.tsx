@@ -64,6 +64,7 @@ export default function GlobalCallHandler() {
           }}
           onReject={groupCall.rejectGroupCall}
           onEnd={groupCall.endGroupCall}
+          onEnableCamera={groupCall.enableCamera}
         />
       )}
     </>

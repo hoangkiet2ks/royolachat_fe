@@ -12,7 +12,7 @@ import {
 } from "../features/auth/auth.schemas";
 import { authApi } from "../features/auth/auth.api";
 import { getApiErrorMessage } from "../lib/api-error";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
@@ -21,6 +21,14 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Thêm State cho 2FA
+  const [require2FA, setRequire2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [pendingCredentials, setPendingCredentials] =
+    useState<LoginFormValues | null>(null);
+
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   const {
     register,
@@ -39,16 +47,33 @@ export default function LoginPage() {
       setLoading(true);
       setServerError("");
 
-      const res = await authApi.login(values);
+      // Build login payload - only include totpCode if it's provided
+      const loginPayload: any = {
+        email: values.email,
+        password: values.password,
+      };
+
+      if (totpCode && totpCode.length === 6) {
+        loginPayload.totpCode = totpCode;
+      }
+
+      const res = await authApi.login(loginPayload);
+
+      if (res.data.require2FA) {
+        setRequire2FA(true);
+        setPendingCredentials(values);
+        return;
+      }
 
       setSession({
-        accessToken: res.data.accessToken,
-        refreshToken: res.data.refreshToken,
-        userId: res.data.userId,
-        name: res.data.name,
-        email: res.data.email,
-        avatar: res.data.avatar,
-        phoneNumber: res.data.phoneNumber,
+        accessToken: res.data.accessToken as string,
+        refreshToken: res.data.refreshToken as string,
+        userId: res.data.userId as number,
+        name: res.data.name as string,
+        email: res.data.email as string,
+        avatar: res.data.avatar as string | null,
+        phoneNumber: res.data.phoneNumber as string,
+        is2FAEnabled: res.data.is2FAEnabled as boolean,
       });
 
       navigate("/dashboard");
@@ -80,47 +105,149 @@ export default function LoginPage() {
         </p>
       }
     >
-      <form className="form" onSubmit={handleSubmit(onSubmit)}>
-        <TextInput
-          label="Email"
-          type="email"
-          placeholder="you@example.com"
-          {...register("email")}
-        />
-        <FieldError message={errors.email?.message} />
+      <form
+        className="form"
+        onSubmit={(e) => {
+          if (require2FA) {
+            e.preventDefault();
+          } else {
+            handleSubmit(onSubmit)(e);
+          }
+        }}
+      >
+        {require2FA ? (
+          <>
+            <div
+              style={{
+                marginBottom: "16px",
+                textAlign: "center",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Tài khoản của bạn đã bật Xác thực 2 bước. <br />
+              Vui lòng nhập mã 6 số từ ứng dụng Google Authenticator.
+            </div>
+            <TextInput
+              label="Mã xác thực 2FA"
+              type="text"
+              placeholder="Nhập mã 6 số"
+              maxLength={6}
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value)}
+              onKeyPress={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  totpCode.length === 6 &&
+                  pendingCredentials
+                ) {
+                  e.preventDefault();
+                  confirmButtonRef.current?.click();
+                }
+              }}
+              style={{
+                textAlign: "center",
+                letterSpacing: "8px",
+                fontSize: "1.2rem",
+                fontWeight: "bold",
+              }}
+            />
+            {serverError && <div className="server-error">{serverError}</div>}
 
-        <PasswordInput
-          label="Mật khẩu"
-          placeholder="••••••••"
-          {...register("password")}
-        />
-        <FieldError message={errors.password?.message} />
+            <Button
+              ref={confirmButtonRef}
+              type="button"
+              loading={loading}
+              onClick={async () => {
+                if (pendingCredentials && totpCode.length === 6) {
+                  setServerError("");
+                  setLoading(true);
+                  try {
+                    const loginPayload: any = {
+                      email: pendingCredentials.email,
+                      password: pendingCredentials.password,
+                      totpCode: totpCode,
+                    };
+                    const res = await authApi.login(loginPayload);
 
-        <div className="row-between">
-          <span />
-          <Link to="/forgot-password" className="text-link">
-            Quên mật khẩu?
-          </Link>
-        </div>
+                    setSession({
+                      accessToken: res.data.accessToken as string,
+                      refreshToken: res.data.refreshToken as string,
+                      userId: res.data.userId as number,
+                      name: res.data.name as string,
+                      email: res.data.email as string,
+                      avatar: res.data.avatar as string | null,
+                      phoneNumber: res.data.phoneNumber as string,
+                      is2FAEnabled: res.data.is2FAEnabled as boolean,
+                    });
+                    navigate("/dashboard");
+                  } catch (error) {
+                    setServerError(getApiErrorMessage(error));
+                  } finally {
+                    setLoading(false);
+                  }
+                }
+              }}
+              disabled={totpCode.length < 6}
+            >
+              Xác nhận
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setRequire2FA(false);
+                setTotpCode("");
+                setServerError("");
+              }}
+              style={{ marginTop: "12px" }}
+            >
+              Quay lại
+            </Button>
+          </>
+        ) : (
+          <>
+            <TextInput
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              {...register("email")}
+            />
+            <FieldError message={errors.email?.message} />
 
-        {serverError && <div className="server-error">{serverError}</div>}
+            <PasswordInput
+              label="Mật khẩu"
+              placeholder="••••••••"
+              {...register("password")}
+            />
+            <FieldError message={errors.password?.message} />
 
-        <Button type="submit" loading={loading}>
-          Đăng nhập
-        </Button>
+            <div className="row-between">
+              <span />
+              <Link to="/forgot-password" className="text-link">
+                Quên mật khẩu?
+              </Link>
+            </div>
 
-        <div className="divider">
-          <span>hoặc</span>
-        </div>
+            {serverError && <div className="server-error">{serverError}</div>}
 
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={handleGoogleLogin}
-          loading={googleLoading}
-        >
-          Đăng nhập với Google
-        </Button>
+            <Button type="submit" loading={loading}>
+              Đăng nhập
+            </Button>
+
+            <div className="divider">
+              <span>hoặc</span>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleGoogleLogin}
+              loading={googleLoading}
+            >
+              Đăng nhập với Google
+            </Button>
+          </>
+        )}
       </form>
     </AuthShell>
   );

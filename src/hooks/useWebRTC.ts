@@ -14,22 +14,6 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // TURN servers - cần thiết khi 2 người khác mạng
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
   ],
 };
 
@@ -280,51 +264,52 @@ export function useWebRTC(socket: Socket | null) {
     setTimeout(cleanup, 1500);
   }, [cleanup, setCallStateSynced]);
 
-  // ---- Chuyển từ audio sang video ----
+  // ---- Chuyển từ audio sang video — chỉ thêm video track, GIỮ NGUYÊN audio track cũ ----
   const switchToVideo = useCallback(async () => {
     if (callType !== 'audio' || !pcRef.current || !socket || !partnerIdRef.current) return;
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // Chỉ xin quyền camera, KHÔNG xin lại mic để tránh mất audio track hiện tại
+      const videoOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
       const pc = pcRef.current;
-      const senders = pc.getSenders();
-      const newAudioTrack = newStream.getAudioTracks()[0];
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const audioSender = senders.find(s => s.track?.kind === 'audio');
-      if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
-      if (newVideoTrack) pc.addTrack(newVideoTrack, newStream);
-      localStreamRef.current?.getTracks().forEach(t => t.stop());
-      localStreamRef.current = newStream;
-      setLocalStream(newStream);
+      const newVideoTrack = videoOnlyStream.getVideoTracks()[0];
+
+      // Thêm video track vào PC (không replaceTrack audio)
+      if (newVideoTrack) pc.addTrack(newVideoTrack, localStreamRef.current!);
+
+      // Ghép video track mới vào stream hiện tại thay vì tạo stream mới
+      const currentStream = localStreamRef.current!;
+      currentStream.addTrack(newVideoTrack);
+
+      // Cập nhật state để UI render video
+      setLocalStream(new MediaStream(currentStream.getTracks()));
       setCallType('video');
+
+      // Renegotiate với peer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('call:offer', { targetUserId: partnerIdRef.current, offer });
       socket.emit('call:switch-to-video', { targetUserId: partnerIdRef.current });
-      console.log('[WebRTC] Switched to video');
+      console.log('[WebRTC] Switched to video, audio track preserved');
     } catch (error) {
       console.error('Failed to switch to video:', error);
       alert('Không thể bật camera. Hãy kiểm tra quyền truy cập.');
     }
   }, [callType, socket]);
 
-  // ---- Đối phương chuyển sang video ----
+  // ---- Đối phương chuyển sang video — chỉ thêm video track, GIỮ NGUYÊN audio track cũ ----
   const handleSwitchToVideo = useCallback(async () => {
     console.log('[WebRTC] Partner switched to video');
     setCallType('video');
     if (localStreamRef.current && localStreamRef.current.getVideoTracks().length === 0) {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        // Chỉ xin camera, không xin lại mic
+        const videoOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
         const pc = pcRef.current;
-        if (pc && socket && partnerIdRef.current) {
-          const senders = pc.getSenders();
-          const newAudioTrack = newStream.getAudioTracks()[0];
-          const newVideoTrack = newStream.getVideoTracks()[0];
-          const audioSender = senders.find(s => s.track?.kind === 'audio');
-          if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
-          if (newVideoTrack) pc.addTrack(newVideoTrack, newStream);
-          localStreamRef.current?.getTracks().forEach(t => t.stop());
-          localStreamRef.current = newStream;
-          setLocalStream(newStream);
+        const newVideoTrack = videoOnlyStream.getVideoTracks()[0];
+        if (pc && socket && partnerIdRef.current && newVideoTrack) {
+          pc.addTrack(newVideoTrack, localStreamRef.current);
+          localStreamRef.current.addTrack(newVideoTrack);
+          setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit('call:offer', { targetUserId: partnerIdRef.current, offer });

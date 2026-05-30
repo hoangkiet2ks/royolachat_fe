@@ -33,6 +33,17 @@ export default function CallModal({
   const [isMuted, setIsMuted] = useState(false);
   const [isCamOff, setIsCamOff] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [callingTimeout, setCallingTimeout] = useState(false);
+
+  // Timeout 15s khi đang gọi chờ đối phương bắt máy
+  useEffect(() => {
+    if (callState !== 'calling') { setCallingTimeout(false); return; }
+    const timer = setTimeout(() => {
+      setCallingTimeout(true);
+      onEnd(); // Tự động kết thúc sau 15s
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [callState, onEnd]);
 
   // Reset mute state khi localStream thay đổi
   useEffect(() => {
@@ -112,9 +123,7 @@ export default function CallModal({
     incoming: `Cuộc gọi ${callType === 'video' ? 'video' : 'thoại'} đến`,
     connected: formatTime(elapsed),
     ended: 'Cuộc gọi đã kết thúc',
-  }[callState];
-
-  return (
+  }[callState];  return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 99999,
       background: isVideoConnected ? '#000' : 'rgba(10,10,20,0.92)',

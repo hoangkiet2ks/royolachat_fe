@@ -4,9 +4,13 @@ import { useCall } from '../../context/CallContext';
 import axios from 'axios';
 import EmojiPicker from 'emoji-picker-react';
 
+import { CreatePollModal } from './CreatePollModal';
+import { PollMessage, type PollData } from './PollMessage';
+
 // Cập nhật Interface để chứa Reaction và isPinned
 interface Reaction { id: number; messageId: number; userId: number; emoji: string; }
-interface Message { id: number; content: string; senderId: number; type: string; fileUrl?: string; isRecalled?: boolean; sender?: { name: string; avatar: string }; isPinned?: boolean; reactions?: Reaction[]; }
+interface ReplyInfo { id: number; content: string; type: string; sender?: { name: string }; }
+interface Message { id: number; content: string; senderId: number; type: string; fileUrl?: string; isRecalled?: boolean; sender?: { name: string; avatar: string }; isPinned?: boolean; reactions?: Reaction[]; replyTo?: ReplyInfo | null; poll?: PollData; }
 interface GroupMember { id: number; name: string; avatar: string | null; role: string; }
 interface ChatInfo { id: number; isGroup: boolean; name: string; avatar: string | null; partnerId?: number; myRole?: string; members?: GroupMember[]; }
 interface PendingRequest { id: number; user: { id: number; name: string; avatar: string | null }; inviter: { id: number; name: string; avatar: string | null }; }
@@ -16,18 +20,18 @@ interface ChatRoomProps { conversationId: number; onToggleSidebar?: () => void; 
 
 export default function ChatRoom({ conversationId, onToggleSidebar, sidebarCollapsed }: ChatRoomProps) {
   const { session } = useAuth();
-  const token = session?.accessToken || null; 
+  const token = session?.accessToken || null;
   const { socket, webrtc, groupCall, setActiveGroupName } = useCall();
   const apiUrl = import.meta.env.VITE_API_URL;
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null); 
+  const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [inputText, setInputText] = useState('');
   const [isOnline, setIsOnline] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
-  const [isUploading, setIsUploading] = useState(false); 
+  const [isUploading, setIsUploading] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
-  
+
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [eligibleFriends, setEligibleFriends] = useState<any[]>([]);
@@ -38,7 +42,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [messageToForward, setMessageToForward] = useState<Message | null>(null);
-  const [forwardConversations, setForwardConversations] = useState<ForwardTarget[]>([]); 
+  const [forwardConversations, setForwardConversations] = useState<ForwardTarget[]>([]);
   const [selectedForwardTargets, setSelectedForwardTargets] = useState<ForwardTarget[]>([]);
 
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
@@ -46,14 +50,17 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const groupAvatarInputRef = useRef<HTMLInputElement>(null);
 
+  // STATE: Modal tạo bình chọn
+  const [showCreatePollModal, setShowCreatePollModal] = useState(false);
+
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') !== 'light');
-  
+
   // STATE: Quản lý ẩn hiện thanh Thông tin bên phải
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   // STATE: Theo dõi online cho nhóm
   const [onlineStatuses, setOnlineStatuses] = useState<Record<number, boolean>>({});
   // STATE: Điều khiển sổ danh sách thành viên ra
-  const [isMembersExpanded, setIsMembersExpanded] = useState(false);  
+  const [isMembersExpanded, setIsMembersExpanded] = useState(false);
 
   // STATE: Quản lý việc hiển thị Modal chọn Admin mới khi rời nhóm
   const [showTransferAdminModal, setShowTransferAdminModal] = useState(false);
@@ -77,6 +84,12 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const [toneEditLoading, setToneEditLoading] = useState(false);
   const [toneToastError, setToneToastError] = useState<string | null>(null);
 
+  const [typingUsers, setTypingUsers] = useState<{ id: number, name: string }[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // STATE TÍNH NĂNG REPLY
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
   useEffect(() => {
     const handleThemeChange = () => setIsDark(localStorage.getItem('theme') !== 'light');
     window.addEventListener('themeChange', handleThemeChange);
@@ -85,9 +98,25 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  const prevMessagesLengthRef = useRef(0);
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      scrollToBottom();
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages]);
+
+  // Detect khi user scroll lên xa khỏi cuối → hiện nút nhảy xuống
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distanceFromBottom > 200);
+  };
 
   const fetchChatData = async () => {
     if (!token || !conversationId) return;
@@ -97,13 +126,13 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       const [historyRes, infoRes, pinsRes] = await Promise.all([
         axios.get(`${apiUrl}/chat/${conversationId}/messages`, config),
         axios.get(`${apiUrl}/chat/conversation/${conversationId}`, config),
-        axios.get(`${apiUrl}/chat/conversation/${conversationId}/pins`, config).catch(() => ({ data: [] })) // Fallback nếu chưa tạo API
+        axios.get(`${apiUrl}/chat/conversation/${conversationId}/pins`, config).catch(() => ({ data: [] }))
       ]);
-      
+
       const sortedMessages = historyRes.data.sort((a: any, b: any) => a.id - b.id);
       setMessages(sortedMessages);
       setChatInfo(infoRes.data);
-      setPinnedMessages(pinsRes.data); 
+      setPinnedMessages(pinsRes.data);
     } catch (error) { console.error('Lỗi lấy dữ liệu chat:', error); }
   };
 
@@ -111,7 +140,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
   useEffect(() => {
     if (!socket || !chatInfo) return;
-    
+
     // Quét trạng thái online
     if (!chatInfo.isGroup && chatInfo.partnerId) {
       socket.emit('checkOnlineStatus', chatInfo.partnerId);
@@ -121,31 +150,30 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       });
     }
 
-    // Các Handlers của Socket
-    const handleStatusAnswer = (data: { partnerId: number; isOnline: boolean }) => { 
-      if (data.partnerId === chatInfo.partnerId) setIsOnline(data.isOnline); 
+    const handleStatusAnswer = (data: { partnerId: number; isOnline: boolean }) => {
+      if (data.partnerId === chatInfo.partnerId) setIsOnline(data.isOnline);
       setOnlineStatuses(prev => ({ ...prev, [data.partnerId]: data.isOnline }));
     };
-    
+
     const handleNewMessage = (newMessage: any) => {
       if (newMessage.conversationId === conversationId) {
         setMessages((prev) => {
           const isExist = prev.some(msg => msg.id === newMessage.id);
           if (isExist) return prev;
-          return [...prev, newMessage]; 
+          return [...prev, newMessage];
         });
       }
     };
 
     const handleMessageRecalled = (data: { messageId: number }) => setMessages(prev => prev.map(msg => msg.id === data.messageId ? { ...msg, isRecalled: true } : msg));
-    
-    const handleUserOnline = (data: { userId: number }) => { 
-      if (data.userId === chatInfo.partnerId) setIsOnline(true); 
+
+    const handleUserOnline = (data: { userId: number }) => {
+      if (data.userId === chatInfo.partnerId) setIsOnline(true);
       setOnlineStatuses(prev => ({ ...prev, [data.userId]: true }));
     };
-    
-    const handleUserOffline = (data: { userId: number }) => { 
-      if (data.userId === chatInfo.partnerId) setIsOnline(false); 
+
+    const handleUserOffline = (data: { userId: number }) => {
+      if (data.userId === chatInfo.partnerId) setIsOnline(false);
       setOnlineStatuses(prev => ({ ...prev, [data.userId]: false }));
     };
 
@@ -153,9 +181,9 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       setPinnedMessages(prev => {
         if (updatedMsg.isPinned) {
           const exists = prev.find(m => m.id === updatedMsg.id);
-          return exists ? prev : [updatedMsg, ...prev]; 
+          return exists ? prev : [updatedMsg, ...prev];
         } else {
-          return prev.filter(m => m.id !== updatedMsg.id); 
+          return prev.filter(m => m.id !== updatedMsg.id);
         }
       });
       setMessages(prev => prev.map(m => m.id === updatedMsg.id ? { ...m, isPinned: updatedMsg.isPinned } : m));
@@ -165,7 +193,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       setMessages(prev => prev.map(msg => {
         if (msg.id !== data.messageId) return msg;
         let currentReactions = msg.reactions || [];
-        
+
         if (data.action === 'removed') {
           currentReactions = currentReactions.filter(r => r.userId !== data.userId);
         } else if (data.action === 'updated') {
@@ -177,9 +205,28 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       }));
     };
 
-    // Bot typing handlers (Subtask 8.1)
     const handleBotTyping = () => setBotTyping(true);
     const handleBotTypingStop = () => setBotTyping(false);
+
+    const handleUserTyping = (data: { userId: number; userName: string }) => {
+      setTypingUsers(prev => {
+        if (prev.some(u => u.id === data.userId)) return prev;
+        return [...prev, { id: data.userId, name: data.userName }];
+      });
+    };
+
+    const handleUserStoppedTyping = (data: { userId: number }) => {
+      setTypingUsers(prev => prev.filter(u => u.id !== data.userId));
+    };
+
+    const handlePollUpdated = (updatedPoll: PollData) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg.poll?.id === updatedPoll.id) {
+          return { ...msg, poll: updatedPoll };
+        }
+        return msg;
+      }));
+    };
 
     socket.on('statusAnswer', handleStatusAnswer);
     socket.on('newMessage', handleNewMessage);
@@ -190,6 +237,9 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     socket.on('reactionUpdated', handleReactionUpdated);
     socket.on('botTyping', handleBotTyping);
     socket.on('botTypingStop', handleBotTypingStop);
+    socket.on('userTyping', handleUserTyping);
+    socket.on('userStoppedTyping', handleUserStoppedTyping);
+    socket.on('pollUpdated', handlePollUpdated);
 
     return () => {
       socket.off('statusAnswer', handleStatusAnswer);
@@ -201,6 +251,9 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       socket.off('reactionUpdated', handleReactionUpdated);
       socket.off('botTyping', handleBotTyping);
       socket.off('botTypingStop', handleBotTypingStop);
+      socket.off('userTyping', handleUserTyping);
+      socket.off('userStoppedTyping', handleUserStoppedTyping);
+      socket.off('pollUpdated', handlePollUpdated);
     };
   }, [socket, chatInfo, conversationId, session?.userId]);
 
@@ -216,9 +269,54 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   // ================= CÁC HÀM XỬ LÝ TIN NHẮN =================
   const handleSend = () => {
     if (!inputText.trim() || !socket) return;
-    socket.emit('sendMessage', { conversationId, content: inputText, type: 'TEXT' }, (res: any) => {
-      if (res.status === 'success') { setInputText(''); setShowEmoji(false); }
+    socket.emit('sendMessage', {
+      conversationId,
+      content: inputText,
+      type: 'TEXT',
+      replyToId: replyingTo?.id ?? undefined, // GẮN replyToId
+    }, (res: any) => {
+      if (res.status === 'success') {
+        setInputText('');
+        setShowEmoji(false);
+        setReplyingTo(null); // XÓA REPLY SAU KHI GỬI
+        socket.emit('stopTyping', { conversationId });
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      }
     });
+  };
+
+  const handleCreatePoll = (title: string, options: string[]) => {
+    if (!socket) return;
+    socket.emit('sendMessage', {
+      conversationId,
+      content: '[Bình chọn]',
+      type: 'POLL',
+      pollData: { title, options }
+    });
+  };
+
+  const handleVotePoll = (pollId: number, optionId: number) => {
+    if (!socket) return;
+    socket.emit('votePoll', { conversationId, pollId, optionId });
+  };
+
+  const handleAddPollOption = (pollId: number, text: string) => {
+    if (!socket) return;
+    socket.emit('addPollOption', { conversationId, pollId, text });
+  };
+
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    if (!socket || !session?.userId) return;
+
+    socket.emit('typing', { conversationId, userName: session.name || 'Ai đó' });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('stopTyping', { conversationId });
+    }, 2500);
   };
 
   const handleRecall = (messageId: number) => {
@@ -238,7 +336,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const handleTogglePin = (messageId: number) => {
     if (!socket) return;
     socket.emit('togglePin', { messageId, conversationId }, (res: any) => {
-      if (res && res.status === 'error') alert(res.message); 
+      if (res && res.status === 'error') alert(res.message);
     });
     setHoveredMessageId(null);
   };
@@ -246,7 +344,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const handleToggleReaction = (messageId: number, emoji: string) => {
     if (!socket) return;
     socket.emit('toggleReaction', { messageId, conversationId, emoji });
-    setHoveredMessageId(null); 
+    setHoveredMessageId(null);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -255,28 +353,28 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     e.target.value = ''; setIsUploading(true);
     try {
       const formData = new FormData(); formData.append('file', file);
-      const res = await axios.post(`${apiUrl}/chat/upload`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }});
+      const res = await axios.post(`${apiUrl}/chat/upload`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
       const isVideo = file.type.startsWith('video/');
       const textContent = res.data.type === 'IMAGE' ? '[Hình ảnh]' : (isVideo ? `[Video] ${file.name}` : `[Tệp tin] ${file.name}`);
-      socket.emit('sendMessage', { conversationId, content: textContent, fileUrl: res.data.fileUrl, type: res.data.type }, () => {});
+      socket.emit('sendMessage', { conversationId, content: textContent, fileUrl: res.data.fileUrl, type: res.data.type }, () => { });
     } catch (error) { alert("Lỗi upload file"); } finally { setIsUploading(false); }
   };
 
   // ================= CÁC HÀM XỬ LÝ NHÓM =================
   const handleKickMember = async (targetUserId: number) => {
     if (!window.confirm("Mời người này ra khỏi nhóm?")) return;
-    try { await axios.post(`${apiUrl}/chat/group/${conversationId}/kick`, { targetUserId }, { headers: { Authorization: `Bearer ${token}` }}); fetchChatData(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
+    try { await axios.post(`${apiUrl}/chat/group/${conversationId}/kick`, { targetUserId }, { headers: { Authorization: `Bearer ${token}` } }); fetchChatData(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
   };
   const handleAssignRole = async (targetUserId: number, role: string) => {
-    try { await axios.post(`${apiUrl}/chat/group/${conversationId}/role`, { targetUserId, role }, { headers: { Authorization: `Bearer ${token}` }}); fetchChatData(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
+    try { await axios.post(`${apiUrl}/chat/group/${conversationId}/role`, { targetUserId, role }, { headers: { Authorization: `Bearer ${token}` } }); fetchChatData(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
   };
   const handleDisbandGroup = async () => {
     if (!window.confirm("Giải tán nhóm vĩnh viễn?")) return;
-    try { await axios.delete(`${apiUrl}/chat/group/${conversationId}/disband`, { headers: { Authorization: `Bearer ${token}` }}); window.location.reload(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
+    try { await axios.delete(`${apiUrl}/chat/group/${conversationId}/disband`, { headers: { Authorization: `Bearer ${token}` } }); window.location.reload(); } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
   };
   const openAddMemberModal = async () => {
     try {
-      const res = await axios.get(`${apiUrl}/friend/list`, { headers: { Authorization: `Bearer ${token}` }});
+      const res = await axios.get(`${apiUrl}/friend/list`, { headers: { Authorization: `Bearer ${token}` } });
       const currentMemberIds = chatInfo?.members?.map(m => m.id) || [];
       setEligibleFriends((res.data.data || []).filter((f: any) => !currentMemberIds.includes(f.id))); setSelectedNewMembers([]); setShowAddMemberModal(true);
     } catch (error) { alert("Lỗi tải bạn bè"); }
@@ -284,27 +382,27 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const submitAddMembers = async () => {
     if (selectedNewMembers.length === 0) return;
     try {
-      const res = await axios.post(`${apiUrl}/chat/group/${conversationId}/add-members`, { memberIds: selectedNewMembers }, { headers: { Authorization: `Bearer ${token}` }});
+      const res = await axios.post(`${apiUrl}/chat/group/${conversationId}/add-members`, { memberIds: selectedNewMembers }, { headers: { Authorization: `Bearer ${token}` } });
       alert(res.data.message); setShowAddMemberModal(false); fetchChatData();
     } catch (err: any) { alert(err.response?.data?.message || 'Lỗi'); }
   };
   const openPendingRequestsModal = async () => {
     try {
-      const res = await axios.get(`${apiUrl}/chat/group/${conversationId}/pending-requests`, { headers: { Authorization: `Bearer ${token}` }});
+      const res = await axios.get(`${apiUrl}/chat/group/${conversationId}/pending-requests`, { headers: { Authorization: `Bearer ${token}` } });
       setPendingRequests(res.data); setShowPendingModal(true);
     } catch (err: any) { alert("Lỗi tải danh sách chờ"); }
   };
   const handleApprove = async (requestId: number) => {
-    try { await axios.post(`${apiUrl}/chat/group/request/${requestId}/approve`, {}, { headers: { Authorization: `Bearer ${token}` }}); setPendingRequests(prev => prev.filter(req => req.id !== requestId)); fetchChatData(); } catch (err: any) { alert('Lỗi duyệt'); }
+    try { await axios.post(`${apiUrl}/chat/group/request/${requestId}/approve`, {}, { headers: { Authorization: `Bearer ${token}` } }); setPendingRequests(prev => prev.filter(req => req.id !== requestId)); fetchChatData(); } catch (err: any) { alert('Lỗi duyệt'); }
   };
   const handleReject = async (requestId: number) => {
-    try { await axios.post(`${apiUrl}/chat/group/request/${requestId}/reject`, {}, { headers: { Authorization: `Bearer ${token}` }}); setPendingRequests(prev => prev.filter(req => req.id !== requestId)); } catch (err: any) { alert('Lỗi từ chối'); }
+    try { await axios.post(`${apiUrl}/chat/group/request/${requestId}/reject`, {}, { headers: { Authorization: `Bearer ${token}` } }); setPendingRequests(prev => prev.filter(req => req.id !== requestId)); } catch (err: any) { alert('Lỗi từ chối'); }
   };
 
   const openForwardModal = async (msg: Message) => {
     setMessageToForward(msg);
     try {
-      const [convRes, friendRes] = await Promise.all([ axios.get(`${apiUrl}/chat/conversations`, { headers: { Authorization: `Bearer ${token}` } }), axios.get(`${apiUrl}/friend/list`, { headers: { Authorization: `Bearer ${token}` } }) ]);
+      const [convRes, friendRes] = await Promise.all([axios.get(`${apiUrl}/chat/conversations`, { headers: { Authorization: `Bearer ${token}` } }), axios.get(`${apiUrl}/friend/list`, { headers: { Authorization: `Bearer ${token}` } })]);
       const existingConvs = convRes.data; const friendsList = friendRes.data.data || []; const targetList: ForwardTarget[] = [];
       existingConvs.forEach((c: any) => { if (c.isGroup && c.id !== conversationId.toString()) targetList.push({ targetId: `conv_${c.id}`, name: c.name, avatar: c.avatar, isGroup: true, convId: Number(c.id), friendId: null }); });
       friendsList.forEach((f: any) => {
@@ -324,7 +422,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       if (!targetConvId && target.friendId) {
         try { const res = await axios.post(`${apiUrl}/chat/conversation/1v1`, { friendId: target.friendId }, { headers: { Authorization: `Bearer ${token}` } }); targetConvId = res.data.id; } catch (e) { continue; }
       }
-      if (targetConvId) socket.emit('sendMessage', { conversationId: targetConvId, content: messageToForward.content, fileUrl: messageToForward.fileUrl, type: messageToForward.type }, () => {}); 
+      if (targetConvId) socket.emit('sendMessage', { conversationId: targetConvId, content: messageToForward.content, fileUrl: messageToForward.fileUrl, type: messageToForward.type }, () => { });
     }
     setShowForwardModal(false); setMessageToForward(null); alert('Đã chuyển tiếp tin nhắn thành công!');
   };
@@ -340,7 +438,6 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     if (chatInfo.isGroup) {
       const members = chatInfo.members || [];
       await groupCall.startGroupCall(conversationId, members.map(m => ({ id: m.id, name: m.name, avatar: m.avatar })), type, session?.name || 'Bạn');
-      // Không gọi createOffersForAll ở đây - offer sẽ được tạo khi từng người join qua handleOffer
     } else {
       if (!chatInfo.partnerId) return;
       webrtc.startCall(chatInfo.partnerId, chatInfo.name, type, conversationId, 'Bạn');
@@ -351,7 +448,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     if (!editGroupName.trim()) return setIsEditingGroupName(false);
     try {
       await axios.patch(`${apiUrl}/chat/group/${conversationId}/info`, { name: editGroupName }, { headers: { Authorization: `Bearer ${token}` } });
-      setIsEditingGroupName(false); fetchChatData(); 
+      setIsEditingGroupName(false); fetchChatData();
     } catch (err: any) { alert(err.response?.data?.message || 'Lỗi đổi tên'); }
   };
 
@@ -364,8 +461,8 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       const uploadRes = await axios.post(`${apiUrl}/chat/upload`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
       await axios.patch(`${apiUrl}/chat/group/${conversationId}/info`, { avatar: uploadRes.data.fileUrl }, { headers: { Authorization: `Bearer ${token}` } });
       fetchChatData();
-    }catch (error: any) { 
-      alert("Lỗi: " + (error.response?.data?.message || 'Không thể cập nhật ảnh')); 
+    } catch (error: any) {
+      alert("Lỗi: " + (error.response?.data?.message || 'Không thể cập nhật ảnh'));
     } finally { setIsUpdatingAvatar(false); }
   };
 
@@ -387,11 +484,11 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     try {
       await axios.post(`${apiUrl}/chat/group/${conversationId}/leave`, { newAdminId: newAdminId }, { headers: { Authorization: `Bearer ${token}` } });
       alert("Đã rời nhóm thành công!");
-      window.location.reload(); 
+      window.location.reload();
     } catch (err: any) { alert(err.response?.data?.message || 'Lỗi khi rời nhóm'); }
   };
 
-  // ================= SMART REPLY (Subtask 8.2) =================
+  // ================= SMART REPLY =================
   const handleSmartReply = async (messageId: number, content: string) => {
     if (!token) return;
     setSmartReplyLoading(messageId);
@@ -423,12 +520,11 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     }
   };
 
-  // ================= TONE EDITOR (Subtask 8.3) =================
+  // ================= TONE EDITOR =================
   const shouldShowToneEditor = (text: string): boolean => text.length >= 5 && text.length <= 2000;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleTextareaMouseUp = (e: React.MouseEvent<HTMLInputElement>) => {
-    // Dùng setTimeout để đảm bảo browser đã cập nhật selection
     setTimeout(() => {
       const input = inputRef.current;
       if (!input) return;
@@ -442,7 +538,6 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       if (shouldShowToneEditor(selected)) {
         setSelectedText(selected);
         setSelectionRange({ start, end });
-        // Tính vị trí menu dựa trên mouse event
         const rect = input.getBoundingClientRect();
         setToneMenuPosition({
           x: Math.min(e.clientX, window.innerWidth - 280),
@@ -493,12 +588,11 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const fileMessages = messages.filter(m => !m.isRecalled && m.type === 'FILE' && !m.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i));
 
   return (
-    // THẺ BAO NGOÀI CÙNG LÀ FLEX ROW ĐỂ CHIA 2 CỘT
     <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--bg-main)' }}>
-      
+
       {/* CỘT TRÁI: Khu vực Chat Chính */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, transition: 'all 0.3s' }}>
-        
+
         {/* HEADER */}
         <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-panel)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)', zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -524,7 +618,6 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           </div>
 
           <div style={{ display: 'flex', gap: '16px', color: 'var(--text-sub)', alignItems: 'center' }}>
-            {/* Nút ẩn/hiện sidebar */}
             {onToggleSidebar && (
               <button
                 onClick={onToggleSidebar}
@@ -553,7 +646,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           </div>
         </div>
 
-        {/* THANH TIN NHẮN GHIM (PINNED BANNER) */}
+        {/* THANH TIN NHẮN GHIM */}
         {pinnedMessages.length > 0 && (
           <div style={{ background: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', padding: '10px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', zIndex: 9 }}>
             <div onClick={() => setShowPinnedList(!showPinnedList)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
@@ -570,16 +663,16 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
               </div>
               <svg style={{ transform: showPinnedList ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.3s', color: 'var(--text-sub)' }} width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
             </div>
-            
+
             {showPinnedList && (
               <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px', animation: 'fadeIn 0.2s ease' }}>
                 {pinnedMessages.map(pm => (
                   <div key={pm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, paddingRight: '12px' }}>
-                       <span style={{ fontSize: '0.8rem', color: 'var(--text-sub)', fontWeight: 600, marginBottom: '2px' }}>{pm.sender?.name}</span>
-                       <span style={{ fontSize: '0.9rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                         {pm.content || (pm.type === 'IMAGE' ? '[Hình ảnh]' : '[Tệp đính kèm]')}
-                       </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-sub)', fontWeight: 600, marginBottom: '2px' }}>{pm.sender?.name}</span>
+                      <span style={{ fontSize: '0.9rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {pm.content || (pm.type === 'IMAGE' ? '[Hình ảnh]' : '[Tệp đính kèm]')}
+                      </span>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); handleTogglePin(pm.id); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, padding: '6px 12px', borderRadius: '8px', transition: '0.2s' }}>
                       Bỏ ghim
@@ -592,50 +685,35 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
         )}
 
         {/* NỘI DUNG CHAT */}
-        <div style={{ flex: 1, padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}>
           {messages.map((msg, index) => {
             const isMe = msg.senderId === Number(session?.userId);
             const showAvatar = !isMe && (index === 0 || messages[index - 1].senderId !== msg.senderId);
             const isMsgRecalled = msg.isRecalled || msg.content === 'Tin nhắn đã được thu hồi';
 
-            // ---- SYSTEM MESSAGE (thông báo cuộc gọi) ----
+            // SYSTEM MESSAGE
             if (msg.type === 'SYSTEM') {
               return (
-                <div key={index} style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  padding: '2px 0',
-                }}>
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'var(--hover-bg)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '999px',
-                    padding: '5px 14px',
-                    fontSize: '0.8rem',
-                    color: 'var(--text-sub)',
-                    fontWeight: 500,
-                    maxWidth: '80%',
-                    textAlign: 'center',
-                  }}>
+                <div key={index} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '2px 0' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--hover-bg)', border: '1px solid var(--border-color)', borderRadius: '999px', padding: '5px 14px', fontSize: '0.8rem', color: 'var(--text-sub)', fontWeight: 500, maxWidth: '80%', textAlign: 'center' }}>
                     {msg.content}
                   </div>
                 </div>
               );
             }
+
             const senderAvatar = msg.sender?.avatar || (!chatInfo?.isGroup ? chatInfo?.avatar : null);
 
-            // Gói cái Menu vào 1 biến cho gọn, tránh viết lặp lại 2 lần
+            // =============================================
+            // HOVER MENU - ĐÃ THÊM NÚT REPLY
+            // =============================================
             const renderHoverMenu = () => (
               <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-panel)', padding: '4px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)', zIndex: 20 }}>
                 {/* CHỌN EMOJI NHANH */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '6px', marginRight: '2px' }}>
                   {['👍', '❤️', '😆', '😮', '😢'].map(emoji => (
-                    <div 
-                      key={emoji} 
+                    <div
+                      key={emoji}
                       onClick={() => handleToggleReaction(msg.id, emoji)}
                       style={{ cursor: 'pointer', fontSize: '1.2rem', transition: 'transform 0.1s' }}
                       onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
@@ -646,10 +724,23 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                   ))}
                 </div>
 
+                {/* NÚT REPLY ← MỚI THÊM */}
+                <div
+                  onClick={() => { setReplyingTo(msg); setHoveredMessageId(null); }}
+                  style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px', transition: 'background 0.15s' }}
+                  title="Trả lời"
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                  </svg>
+                </div>
+
                 <div onClick={() => handleTogglePin(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: msg.isPinned ? '#f59e0b' : 'var(--text-sub)', borderRadius: '8px' }} title={msg.isPinned ? "Bỏ ghim" : "Ghim tin nhắn"}>
                   <svg width="16" height="16" fill={msg.isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M17.5 11.5l2.5 2.5-4 4-2.5-2.5M6.5 11.5L4 14l4 4 2.5-2.5" /></svg>
                 </div>
-                
+
                 <div onClick={() => openForwardModal(msg)} style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px' }} title="Chuyển tiếp"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg></div>
                 {isMe && <div onClick={() => handleRecall(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-sub)', borderRadius: '8px' }} title="Thu hồi"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg></div>}
                 <div onClick={() => handleDelete(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: '#ef4444', borderRadius: '8px' }} title="Xóa"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></div>
@@ -658,8 +749,8 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
             return (
               <div key={index} onMouseEnter={() => setHoveredMessageId(msg.id)} onMouseLeave={() => setHoveredMessageId(null)} style={{ display: 'flex', gap: '10px', alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', position: 'relative', marginBottom: msg.reactions && msg.reactions.length > 0 ? '12px' : '0' }}>
-                
-                {/* Khu vực Avatar */}
+
+                {/* Avatar */}
                 {!isMe && (
                   <div style={{ width: '36px', flexShrink: 0, marginTop: 'auto', marginBottom: '4px' }}>
                     {showAvatar && (
@@ -673,117 +764,160 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                     )}
                   </div>
                 )}
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, position: 'relative' }}>
                   {/* Tên người gửi */}
                   {chatInfo?.isGroup && !isMe && showAvatar && <span style={{ fontSize: '12px', color: 'var(--text-sub)', marginBottom: '6px', marginLeft: '4px', fontWeight: 500 }}>{msg.sender?.name}</span>}
-                  
-                  {/* BỌC CẢ MENU VÀ BONG BÓNG CHAT VÀO CÙNG 1 HÀNG (FLEX ROW) */}
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    
-                    {/* NẾU LÀ MÌNH GỬI -> HIỆN MENU Ở BÊN TRÁI BONG BÓNG */}
+
+                    {/* Menu bên trái (nếu là mình) */}
                     {isMe && hoveredMessageId === msg.id && !isMsgRecalled && renderHoverMenu()}
 
                     {/* BONG BÓNG TIN NHẮN */}
-                    <div style={{ 
-                      padding: msg.type === 'IMAGE' && !isMsgRecalled ? '4px' : '12px 18px', 
-                      background: isMsgRecalled ? 'transparent' : (isMe ? 'var(--msg-me-bg)' : 'var(--msg-other-bg)'), 
-                      color: isMsgRecalled ? 'var(--text-sub)' : (isMe ? 'var(--msg-me-text)' : 'var(--msg-other-text)'), 
-                      border: isMsgRecalled ? '1px solid var(--border-color)' : (isMe ? 'none' : '1px solid var(--border-color)'), 
-                      fontStyle: isMsgRecalled ? 'italic' : 'normal', 
-                      fontSize: '0.95rem', 
+                    <div style={{
+                      padding: msg.type === 'IMAGE' && !isMsgRecalled ? '4px' : (msg.type === 'POLL' ? '0' : '12px 18px'),
+                      background: msg.type === 'POLL' || isMsgRecalled ? 'transparent' : (isMe ? 'var(--msg-me-bg)' : 'var(--msg-other-bg)'),
+                      color: isMsgRecalled ? 'var(--text-sub)' : (isMe ? 'var(--msg-me-text)' : 'var(--msg-other-text)'),
+                      border: msg.type === 'POLL' ? 'none' : (isMsgRecalled ? '1px solid var(--border-color)' : (isMe ? 'none' : '1px solid var(--border-color)')),
+                      fontStyle: isMsgRecalled ? 'italic' : 'normal',
+                      fontSize: '0.95rem',
                       lineHeight: '1.5',
-                      borderRadius: '20px', 
-                      borderBottomRightRadius: isMe ? '4px' : '20px', 
-                      borderBottomLeftRadius: !isMe ? '4px' : '20px', 
-                      maxWidth: msg.type === 'IMAGE' || msg.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i) ? '320px' : '100%', 
-                      overflow: 'hidden',
-                      boxShadow: isMsgRecalled || msg.type === 'IMAGE' ? 'none' : 'var(--shadow-sm)'
+                      borderRadius: '20px',
+                      borderBottomRightRadius: isMe ? '4px' : '20px',
+                      borderBottomLeftRadius: !isMe ? '4px' : '20px',
+                      maxWidth: msg.type === 'IMAGE' || msg.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i) ? '320px' : '100%',
+                      overflow: msg.type === 'POLL' ? 'visible' : 'hidden',
+                      boxShadow: isMsgRecalled || msg.type === 'IMAGE' || msg.type === 'POLL' ? 'none' : 'var(--shadow-sm)'
                     }}>
-                      {isMsgRecalled ? (<span>Tin nhắn đã được thu hồi</span>) : (
-                         <>
-                            {(msg.type === 'TEXT' || !msg.type) && <span>{msg.content}</span>}
-                            {msg.type === 'IMAGE' && <img src={msg.fileUrl} alt="Ảnh tải lên" style={{ width: '100%', borderRadius: '16px', cursor: 'pointer', display: 'block' }} onClick={() => window.open(msg.fileUrl, '_blank')} />}
-                            {msg.type === 'FILE' && (
-                              msg.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-                                <video controls style={{ width: '100%', borderRadius: '16px', display: 'block', outline: 'none', backgroundColor: '#000' }}><source src={msg.fileUrl} />Video không hỗ trợ.</video>
-                              ) : (
-                                <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'inherit', textDecoration: 'none', fontWeight: 500 }}>
-                                  <div style={{ background: isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-main)', padding: '8px', borderRadius: '10px' }}>
-                                    <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                  </div>
-                                  <span style={{ textDecoration: 'underline' }}>{msg.content?.replace('[Tệp tin] ', '').replace('[Video] ', '')}</span>
-                                </a>
-                              )
-                            )}
-                         </>
+                      {isMsgRecalled ? (
+                        <span>Tin nhắn đã được thu hồi</span>
+                      ) : (
+                        <>
+                          {/* =============================================
+                              PREVIEW REPLY TRONG BUBBLE ← MỚI THÊM
+                          ============================================= */}
+                          {msg.replyTo && (
+                            <div style={{
+                              borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.45)' : '#8b5cf6'}`,
+                              paddingLeft: '10px',
+                              marginBottom: '8px',
+                              background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(139,92,246,0.07)',
+                              borderRadius: '0 8px 8px 0',
+                              padding: '6px 10px',
+                            }}>
+                              <div style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                color: isMe ? 'rgba(255,255,255,0.75)' : '#8b5cf6',
+                                marginBottom: '2px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                </svg>
+                                {msg.replyTo.sender?.name || 'Ai đó'}
+                              </div>
+                              <div style={{
+                                fontSize: '0.82rem',
+                                color: isMe ? 'rgba(255,255,255,0.65)' : 'var(--text-sub)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '220px'
+                              }}>
+                                {msg.replyTo.type === 'IMAGE'
+                                  ? '📷 Hình ảnh'
+                                  : msg.replyTo.type === 'FILE'
+                                    ? '📎 Tệp đính kèm'
+                                    : msg.replyTo.content}
+                              </div>
+                            </div>
+                          )}
+
+                          {(msg.type === 'TEXT' || !msg.type) && <span>{msg.content}</span>}
+                          {msg.type === 'IMAGE' && <img src={msg.fileUrl} alt="Ảnh tải lên" style={{ width: '100%', borderRadius: '16px', cursor: 'pointer', display: 'block' }} onClick={() => window.open(msg.fileUrl, '_blank')} />}
+                          {msg.type === 'FILE' && (
+                            msg.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                              <video controls style={{ width: '100%', borderRadius: '16px', display: 'block', outline: 'none', backgroundColor: '#000' }}><source src={msg.fileUrl} />Video không hỗ trợ.</video>
+                            ) : (
+                              <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'inherit', textDecoration: 'none', fontWeight: 500 }}>
+                                <div style={{ background: isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-main)', padding: '8px', borderRadius: '10px' }}>
+                                  <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                </div>
+                                <span style={{ textDecoration: 'underline' }}>{msg.content?.replace('[Tệp tin] ', '').replace('[Video] ', '')}</span>
+                              </a>
+                            )
+                          )}
+                          {msg.type === 'POLL' && msg.poll && (
+                            <PollMessage
+                              poll={msg.poll}
+                              currentUserId={Number(session?.userId)}
+                              onVote={handleVotePoll}
+                              onAddOption={handleAddPollOption}
+                            />
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {/* NẾU LÀ NGƯỜI KHÁC GỬI -> HIỆN MENU Ở BÊN PHẢI BONG BÓNG */}
+                    {/* Menu bên phải (nếu là người khác) */}
                     {!isMe && hoveredMessageId === msg.id && !isMsgRecalled && renderHoverMenu()}
-
                   </div>
 
-                  {/* HIỂN THỊ REACTION BÊN DƯỚI TIN NHẮN */}
+                  {/* REACTIONS — nằm dưới bubble, không dùng absolute */}
                   {!isMsgRecalled && msg.reactions && msg.reactions.length > 0 && (
-                    <div style={{ 
-                      position: 'absolute', 
-                      bottom: '-14px', 
-                      [isMe ? 'right' : 'left']: '16px', 
-                      background: 'var(--bg-panel)', 
-                      borderRadius: '12px', 
-                      padding: '2px 6px', 
-                      boxShadow: 'var(--shadow-sm)', 
-                      border: '1px solid var(--border-color)', 
-                      display: 'flex', 
-                      alignItems: 'center', 
+                    <div style={{
+                      marginTop: '4px',
+                      background: 'var(--bg-panel)',
+                      borderRadius: '12px',
+                      padding: '2px 6px',
+                      boxShadow: 'var(--shadow-sm)',
+                      border: '1px solid var(--border-color)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
                       gap: '2px',
                       fontSize: '0.85rem',
-                      zIndex: 5
+                      alignSelf: isMe ? 'flex-end' : 'flex-start',
                     }}>
                       {Array.from(new Set(msg.reactions.map(r => r.emoji))).map(emoji => (
-                         <span key={emoji}>{emoji}</span>
+                        <span key={emoji}>{emoji}</span>
                       ))}
                       {msg.reactions.length > 1 && <span style={{ marginLeft: '4px', fontWeight: 600, color: 'var(--text-sub)' }}>{msg.reactions.length}</span>}
                     </div>
                   )}
 
-                  {/* SMART REPLY BUTTON (Subtask 8.2) — chỉ hiển thị cho tin nhắn TEXT từ đối phương, không phải bot */}
+                  {/* SMART REPLY — rút gọn thành icon bóng đèn */}
                   {!isMe && !isMsgRecalled && msg.type === 'TEXT' && msg.sender && !(msg.sender as any).isBot && (
-                    <div style={{ marginTop: msg.reactions && msg.reactions.length > 0 ? '20px' : '6px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
-                      {/* Nút gợi ý */}
+                    <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
                       <button
                         onClick={() => handleSmartReply(msg.id, msg.content)}
                         disabled={smartReplyLoading === msg.id}
+                        title="Gợi ý trả lời"
                         style={{
                           background: 'transparent',
                           border: '1px solid var(--border-color)',
                           color: smartReplyError === msg.id ? '#ef4444' : 'var(--text-sub)',
                           borderColor: smartReplyError === msg.id ? '#ef4444' : 'var(--border-color)',
-                          borderRadius: '12px',
-                          padding: '4px 10px',
-                          fontSize: '0.78rem',
+                          borderRadius: '50%',
+                          width: '26px',
+                          height: '26px',
+                          padding: '0',
+                          fontSize: '0.85rem',
                           cursor: smartReplyLoading === msg.id ? 'wait' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '5px',
+                          justifyContent: 'center',
                           transition: 'all 0.2s',
                         }}
                       >
                         {smartReplyLoading === msg.id ? (
-                          <>
-                            <div style={{ width: '10px', height: '10px', border: '2px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                            Đang tải...
-                          </>
-                        ) : smartReplyError === msg.id ? (
-                          '⚠️ Thử lại'
-                        ) : (
-                          '💡 Gợi ý trả lời'
-                        )}
+                          <div style={{ width: '10px', height: '10px', border: '2px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                        ) : smartReplyError === msg.id ? '⚠️' : '💡'}
                       </button>
 
-                      {/* Các nút gợi ý sau khi nhận response */}
                       {smartReplies && smartReplies.messageId === msg.id && smartReplies.replies.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                           {smartReplies.replies.map((reply, idx) => (
@@ -818,9 +952,55 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
             );
           })}
           <div ref={messagesEndRef} />
+
+          {/* Nút nhảy xuống tin nhắn mới nhất */}
+          {showScrollBtn && (
+            <button
+              onClick={scrollToBottom}
+              style={{
+                position: 'sticky',
+                bottom: '16px',
+                alignSelf: 'flex-end',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'var(--bg-panel)',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 20,
+                transition: 'opacity 0.2s, transform 0.2s',
+              }}
+              title="Nhảy xuống tin nhắn mới nhất"
+            >
+              <svg width="20" height="20" fill="none" stroke="var(--text-main)" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* BOT TYPING INDICATOR (Subtask 8.1) */}
+        {/* TYPING INDICATOR */}
+        {typingUsers.length > 0 && (
+          <div style={{ padding: '0 24px 8px', display: 'flex', alignItems: 'center', gap: '8px', animation: 'fadeIn 0.3s ease' }}>
+            <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--text-sub)', animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+              ))}
+            </div>
+            <span style={{ color: 'var(--text-sub)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+              {typingUsers.length === 1
+                ? `${typingUsers[0].name} đang soạn tin...`
+                : `${typingUsers.map(u => u.name).join(', ')} đang soạn tin...`
+              }
+            </span>
+          </div>
+        )}
+
+        {/* BOT TYPING */}
         {botTyping && (
           <div style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '14px', flexShrink: 0 }}>🤖</div>
@@ -837,9 +1017,79 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
         {/* Ô NHẬP TIN NHẮN */}
         <div className="moji-input-area" style={{ padding: '16px 20px', background: 'var(--bg-panel)', borderTop: '1px solid var(--border-color)', position: 'relative', zIndex: 10 }}>
+
+          {/* =============================================
+              THANH PREVIEW REPLY ← MỚI THÊM
+          ============================================= */}
+          {replyingTo && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'var(--bg-main)',
+              border: '1px solid var(--border-color)',
+              borderLeft: '3px solid #8b5cf6',
+              borderRadius: '12px',
+              padding: '8px 14px',
+              marginBottom: '10px',
+              animation: 'fadeIn 0.15s ease',
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+                <div style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#8b5cf6',
+                  marginBottom: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                  </svg>
+                  Đang trả lời {replyingTo.sender?.name || 'tin nhắn'}
+                </div>
+                <div style={{
+                  fontSize: '0.85rem',
+                  color: 'var(--text-sub)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '400px'
+                }}>
+                  {replyingTo.type === 'IMAGE'
+                    ? '📷 Hình ảnh'
+                    : replyingTo.type === 'FILE'
+                      ? '📎 Tệp đính kèm'
+                      : replyingTo.content}
+                </div>
+              </div>
+              <div
+                onClick={() => setReplyingTo(null)}
+                style={{
+                  cursor: 'pointer',
+                  color: 'var(--text-sub)',
+                  padding: '4px',
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  marginLeft: '8px',
+                  transition: 'background 0.15s',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+            </div>
+          )}
+
           {showEmoji && <div style={{ position: 'absolute', bottom: '80px', right: '40px', zIndex: 50, boxShadow: 'var(--shadow-modal)', borderRadius: '12px' }}><EmojiPicker onEmojiClick={(e) => setInputText(prev => prev + e.emoji)} theme={isDark ? "dark" as any : "light" as any} /></div>}
-          
-          {/* TONE EDITOR FLOATING MENU (Subtask 8.3) */}
+
+          {/* TONE EDITOR FLOATING MENU */}
           {toneMenuVisible && (
             <div
               style={{
@@ -885,28 +1135,31 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           <div className="moji-chat-input-row" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
             <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+            <svg onClick={() => setShowCreatePollModal(true)} title="Tạo bình chọn" style={{ color: 'var(--text-sub)', cursor: 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             {isUploading && <span style={{ fontSize: '13px', color: '#8b5cf6', marginRight: '8px', whiteSpace: 'nowrap', fontWeight: 500 }}>Đang tải...</span>}
+
             <input
               type="text"
               ref={inputRef}
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               onMouseUp={handleTextareaMouseUp}
               onBlur={() => { if (!toneEditLoading) setTimeout(() => setToneMenuVisible(false), 150); }}
-              placeholder="Nhập tin nhắn của bạn..."
+              placeholder={replyingTo ? `Trả lời ${replyingTo.sender?.name || ''}...` : 'Nhập tin nhắn của bạn...'}
               style={{ flex: 1, border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '1rem', minWidth: 0 }}
             />
+
             <svg className="emoji-hide-mobile" onClick={() => setShowEmoji(!showEmoji)} style={{ color: showEmoji ? '#8b5cf6' : 'var(--text-sub)', cursor: 'pointer', margin: '0 8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+            <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg></button>
           </div>
         </div>
       </div>
 
-      {/* CỘT PHẢI: THANH THÔNG TIN HỘI THOẠI */}
+      {/* CỘT PHẢI: THANH THÔNG TIN */}
       {showInfoPanel && (
         <div style={{ width: '340px', background: 'var(--bg-panel)', borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.3s ease' }}>
-          
+
           <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: 'var(--text-main)', fontWeight: 600 }}>Thông tin hội thoại</h3>
             {chatInfo?.avatar ? (
@@ -920,11 +1173,9 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
-
-            {/* --- THÀNH VIÊN NHÓM --- */}
             {chatInfo?.isGroup && (
               <div style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <div 
+                <div
                   onClick={() => setIsMembersExpanded(!isMembersExpanded)}
                   style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', cursor: 'pointer', transition: 'background 0.2s' }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
@@ -945,7 +1196,6 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                     {chatInfo.members?.map(member => {
                       const isMe = member.id === Number(session?.userId);
                       const isUserOnline = isMe || onlineStatuses[member.id];
-
                       return (
                         <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{ position: 'relative' }}>
@@ -982,7 +1232,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                       ) : (
                         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                           <video src={msg.fileUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', padding: '4px' }}><svg width="16" height="16" fill="#fff" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', padding: '4px' }}><svg width="16" height="16" fill="#fff" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></div>
                         </div>
                       )}
                     </div>
@@ -1010,7 +1260,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
             {/* Nút Xóa Lịch Sử & Rời Nhóm */}
             <div style={{ padding: '24px 16px' }}>
-              <button 
+              <button
                 onClick={handleClearHistory}
                 style={{ width: '100%', padding: '12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', marginBottom: '12px' }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#fff'; }}
@@ -1019,7 +1269,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                 <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 Xóa lịch sử trò chuyện
               </button>
-              
+
               {chatInfo?.isGroup && (
                 <button onClick={() => handleLeaveGroup()} style={{ width: '100%', padding: '12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s', marginBottom: '12px' }}>
                   Rời khỏi nhóm
@@ -1035,7 +1285,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
         </div>
       )}
 
-      {/* ================= CÁC MODAL CŨ GIỮ NGUYÊN BÊN DƯỚI ================= */}
+      {/* MODALS */}
       {showGroupSettings && chatInfo && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}>
           <div className="glass-modal" style={{ width: '420px', borderRadius: '24px', padding: '32px' }}>
@@ -1043,7 +1293,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
               Thông tin nhóm
               <div onClick={() => setShowGroupSettings(false)} style={{ cursor: 'pointer', color: 'var(--text-sub)', padding: '6px', background: 'var(--bg-main)', borderRadius: '50%' }}><svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></div>
             </h2>
-            
+
             <div style={{ background: 'var(--bg-main)', padding: '20px', borderRadius: '16px', marginBottom: '24px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
               <div style={{ position: 'relative', width: '76px', height: '76px', margin: '0 auto 16px' }}>
                 {chatInfo.avatar ? (
@@ -1112,7 +1362,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           <div className="glass-modal" style={{ width: '460px', borderRadius: '24px', padding: '32px' }}>
             <h2 style={{ color: 'var(--text-main)', fontSize: '1.25rem', marginTop: 0, marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>Danh sách chờ duyệt <div onClick={() => setShowPendingModal(false)} style={{ cursor: 'pointer', color: 'var(--text-sub)', padding: '6px', background: 'var(--bg-main)', borderRadius: '50%' }}><svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></div></h2>
             <div style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '8px' }}>
-              {pendingRequests.length === 0 ? (<div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-sub)', background: 'var(--bg-main)', borderRadius: '16px' }}>🎉 Không có yêu cầu nào đang chờ.</div>) : (pendingRequests.map(req => (<div key={req.id} style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: '16px', marginBottom: '14px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)' }}><div style={{ display: 'flex', alignItems: 'center' }}><div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.1rem', fontWeight: 'bold', marginRight: '14px' }}>{req.user.name.charAt(0).toUpperCase()}</div><div><div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '1rem' }}>{req.user.name}</div><div style={{ color: 'var(--text-sub)', fontSize: '0.85rem', marginTop: '2px' }}>Người mời: <span style={{fontWeight: 500}}>{req.inviter.name}</span></div></div></div><div style={{ display: 'flex', gap: '8px' }}><button onClick={() => handleApprove(req.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 2px 6px rgba(16,185,129,0.3)' }}>Duyệt</button><button onClick={() => handleReject(req.id)} style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>Từ chối</button></div></div>)))}
+              {pendingRequests.length === 0 ? (<div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-sub)', background: 'var(--bg-main)', borderRadius: '16px' }}>🎉 Không có yêu cầu nào đang chờ.</div>) : (pendingRequests.map(req => (<div key={req.id} style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: '16px', marginBottom: '14px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)' }}><div style={{ display: 'flex', alignItems: 'center' }}><div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.1rem', fontWeight: 'bold', marginRight: '14px' }}>{req.user.name.charAt(0).toUpperCase()}</div><div><div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '1rem' }}>{req.user.name}</div><div style={{ color: 'var(--text-sub)', fontSize: '0.85rem', marginTop: '2px' }}>Người mời: <span style={{ fontWeight: 500 }}>{req.inviter.name}</span></div></div></div><div style={{ display: 'flex', gap: '8px' }}><button onClick={() => handleApprove(req.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 2px 6px rgba(16,185,129,0.3)' }}>Duyệt</button><button onClick={() => handleReject(req.id)} style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>Từ chối</button></div></div>)))}
             </div>
           </div>
         </div>
@@ -1141,18 +1391,18 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
           </div>
         </div>
       )}
-      
-      {/* MODAL TRAO QUYỀN TRƯỞNG NHÓM TRƯỚC KHI RỜI */}
+
+      {/* MODAL TRAO QUYỀN TRƯỞNG NHÓM */}
       {showTransferAdminModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass-modal" style={{ width: '400px', borderRadius: '24px', padding: '32px' }}>
             <h2 style={{ color: 'var(--text-main)', fontSize: '1.25rem', marginTop: 0, marginBottom: '16px' }}>Trao quyền Trưởng nhóm</h2>
             <p style={{ color: 'var(--text-sub)', fontSize: '0.9rem', marginBottom: '20px' }}>Bạn phải chỉ định một thành viên khác làm Trưởng nhóm trước khi rời đi.</p>
-            
+
             <div style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '24px' }}>
               {chatInfo?.members?.filter(m => m.id !== Number(session?.userId)).map(member => (
-                <div 
-                  key={member.id} 
+                <div
+                  key={member.id}
                   onClick={() => setSelectedNewAdminId(member.id)}
                   style={{ display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '12px', cursor: 'pointer', background: selectedNewAdminId === member.id ? 'rgba(139,92,246,0.1)' : 'transparent', border: selectedNewAdminId === member.id ? '1px solid #8b5cf6' : '1px solid transparent' }}
                 >
@@ -1167,8 +1417,8 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => setShowTransferAdminModal(false)} style={{ flex: 1, padding: '12px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '12px', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
-              <button 
-                onClick={() => handleLeaveGroup(selectedNewAdminId!)} 
+              <button
+                onClick={() => handleLeaveGroup(selectedNewAdminId!)}
                 disabled={!selectedNewAdminId}
                 style={{ flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, opacity: selectedNewAdminId ? 1 : 0.5 }}
               >
@@ -1179,6 +1429,11 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
         </div>
       )}
 
+      <CreatePollModal
+        isOpen={showCreatePollModal}
+        onClose={() => setShowCreatePollModal(false)}
+        onSubmit={handleCreatePoll}
+      />
     </div>
   );
 }

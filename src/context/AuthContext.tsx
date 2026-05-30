@@ -8,6 +8,7 @@ import {
 } from "react";
 import { authApi } from "../features/auth/auth.api";
 import type { AuthSession } from "../lib/storage";
+import { useCallback } from "react";
 import {
   clearStoredSession,
   getStoredSession,
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             phoneNumber: data.phoneNumber ?? stored.phoneNumber,
             createdAt: data.createdAt ?? stored.createdAt,
             birthday: data.birthday ?? stored.birthday,
+            is2FAEnabled: data.is2FAEnabled ?? stored.is2FAEnabled,
           };
           setStoredSession(updated);
           setSessionState(updated);
@@ -55,12 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const setSession = (nextSession: AuthSession) => {
+  const setSession = useCallback((nextSession: AuthSession) => {
     setStoredSession(nextSession);
     setSessionState(nextSession);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     const current = getStoredSession();
 
     try {
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearStoredSession();
       setSessionState(null);
     }
-  };
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -82,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession,
       logout,
     }),
-    [session],
+    [session, setSession, logout],
   );
 
   if (isLoading) {

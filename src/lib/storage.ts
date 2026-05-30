@@ -9,6 +9,7 @@ export type AuthSession = {
   createdAt?: string;
   birthday?: string;
   banner?: string | null;
+  is2FAEnabled?: boolean;
 };
 
 const AUTH_STORAGE_KEY = "ecommerce_auth_session";

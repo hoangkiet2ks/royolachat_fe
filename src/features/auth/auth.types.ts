@@ -1,19 +1,22 @@
-export type VerificationType = "REGISTER" | "FORGOT_PASSWORD";
+export type VerificationType = "REGISTER" | "FORGOT_PASSWORD" | "DISABLE_2FA";
 
 export type LoginBody = {
   email: string;
   password: string;
+  totpCode?: string;
 };
 
 export type LoginResponse = {
-  accessToken: string;
-  refreshToken: string;
-  userId: number;
-  name: string;
-  email: string;
-  avatar: string | null;
-  phoneNumber: string;
-  appRole: string;
+  require2FA?: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  userId?: number;
+  name?: string;
+  email?: string;
+  avatar?: string | null;
+  phoneNumber?: string;
+  appRole?: string;
+  is2FAEnabled?: boolean;
 };
 
 export type RegisterBody = {
@@ -47,8 +50,18 @@ export type UserResponse = {
   name: string;
   avatar: string | null;
   phoneNumber: string;
+  is2FAEnabled: boolean;
 };
 
 export type UpdateAvatarResponse = UserResponse;
 export type UpdatePhoneResponse = UserResponse;
 
+export type TwoFactorSetupResponse = {
+  secret: string;
+  uri: string;
+};
+
+export type DisableTwoFactorBody = {
+  totpCode?: string;
+  code?: string;
+};

@@ -8,6 +8,8 @@ import type {
   SendOtpBody,
   UpdateAvatarResponse,
   UpdatePhoneResponse,
+  TwoFactorSetupResponse,
+  DisableTwoFactorBody,
 } from "./auth.types";
 
 export const authApi = {
@@ -70,6 +72,14 @@ export const authApi = {
   },
 
   getCurrentUser() {
-    return http.get<UpdatePhoneResponse>("/auth/me");
+    return http.get<UserResponse>("/auth/me");
+  },
+
+  setupTwoFactorAuth() {
+    return http.post<TwoFactorSetupResponse>("/auth/2fa/setup", {});
+  },
+
+  disableTwoFactorAuth(body: DisableTwoFactorBody) {
+    return http.post<{ message: string }>("/auth/2fa/disable", body);
   },
 };

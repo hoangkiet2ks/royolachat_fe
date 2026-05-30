@@ -27,22 +27,6 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // TURN servers - cần thiết khi 2 người khác mạng
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
   ],
 };
 
@@ -308,13 +292,38 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
   }, [socket, conversationId, cleanup, setCallStateSynced]);
 
   // Người mới join gửi offer → người đang trong call nhận và gửi answer
+  // Cũng xử lý renegotiation khi peer bật camera (PC đã tồn tại)
   const handleOffer = useCallback(async ({ offer, callerId }: { offer: RTCSessionDescriptionInit; callerId: number }) => {
     const stream = localStreamRef.current;
     if (!stream) {
       console.warn(`[GroupCall] localStream null when receiving offer from ${callerId}`);
       return;
     }
+
     const existing = participantsRef.current.get(callerId);
+
+    // --- RENEGOTIATION: PC đã tồn tại và đang connected → không tạo PC mới ---
+    if (existing?.pc && existing.pc.signalingState !== 'closed') {
+      console.log(`[GroupCall] Renegotiation offer from ${callerId}`);
+      try {
+        await existing.pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await existing.pc.createAnswer();
+        await existing.pc.setLocalDescription(answer);
+        socket?.emit('call:webrtc-answer', { callerId, answer });
+
+        // Kiểm tra nếu offer có video track → cập nhật callType để UI hiện video
+        const hasVideoTrack = offer.sdp?.includes('m=video');
+        if (hasVideoTrack) {
+          setCallType('video');
+          console.log(`[GroupCall] Peer ${callerId} enabled camera, switching to video UI`);
+        }
+      } catch (err) {
+        console.error(`[GroupCall] Renegotiation error from ${callerId}:`, err);
+      }
+      return;
+    }
+
+    // --- NEW CONNECTION: PC chưa tồn tại → tạo mới (người mới join) ---
     if (existing?.pc) existing.pc.close();
 
     const pc = createPC(callerId);
@@ -341,7 +350,12 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
   const handleAnswer = useCallback(async ({ answer, answererId }: { answer: RTCSessionDescriptionInit; answererId: number }) => {
     const participant = participantsRef.current.get(answererId);
     if (!participant?.pc) return;
-    await participant.pc.setRemoteDescription(new RTCSessionDescription(answer));
+    // Chỉ set remote description nếu đang chờ answer (have-local-offer)
+    if (participant.pc.signalingState === 'have-local-offer') {
+      await participant.pc.setRemoteDescription(new RTCSessionDescription(answer));
+    } else {
+      console.warn(`[GroupCall] handleAnswer: unexpected signalingState ${participant.pc.signalingState} for ${answererId}`);
+    }
   }, []);
 
   const handleIceCandidate = useCallback(async ({ candidate, fromUserId }: { candidate: RTCIceCandidateInit; fromUserId: number }) => {
@@ -427,6 +441,39 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
     }
   }, [socket]);
 
+  // ---- Bật camera trong audio call nhóm (chỉ người ấn mới bật) ----
+  const enableCamera = useCallback(async () => {
+    if (!localStreamRef.current) return;
+    try {
+      // Chỉ xin camera, KHÔNG xin lại mic để giữ nguyên audio track
+      const videoOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      const newVideoTrack = videoOnlyStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      // Thêm video track vào stream hiện tại
+      localStreamRef.current.addTrack(newVideoTrack);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      setCallType('video');
+
+      // Gửi offer renegotiate cho tất cả participants
+      for (const [userId, participant] of participantsRef.current.entries()) {
+        if (!participant.pc) continue;
+        try {
+          participant.pc.addTrack(newVideoTrack, localStreamRef.current);
+          const offer = await participant.pc.createOffer();
+          await participant.pc.setLocalDescription(offer);
+          socket?.emit('call:offer', { targetUserId: userId, offer });
+        } catch (err) {
+          console.error(`[GroupCall] enableCamera offer error for ${userId}:`, err);
+        }
+      }
+      console.log('[GroupCall] Camera enabled, audio preserved');
+    } catch (err) {
+      console.error('[GroupCall] enableCamera error:', err);
+      alert('Không thể bật camera. Hãy kiểm tra quyền truy cập.');
+    }
+  }, [socket]);
+
   return {
     callState,
     callType,
@@ -438,6 +485,7 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
     acceptGroupCall,
     rejectGroupCall,
     endGroupCall,
+    enableCamera,
     handleIncoming,
     handleOffer,
     handleAnswer,

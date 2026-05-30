@@ -1,18 +1,30 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import SideBar from "../components/chat/SideBar";
 import UserProfile from "../components/chat/UserProfile";
 import ChatRoom from "../components/chat/ChatRoom";
+import { useCall } from "../context/CallContext";
+import { useAiClientActions } from "../hooks/useAiClientActions";
 
 export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { socket } = useCall();
 
   // Khi người dùng click chọn 1 cuộc trò chuyện
   const handleSelectChat = (id: string | null) => {
     setSelectedId(id);
-    setShowProfile(false); // Đóng Profile nếu đang mở
+    setShowProfile(false);
   };
+
+  // Callback khi AI Agent yêu cầu mở chat room
+  const handleAiOpenChat = useCallback((convId: number) => {
+    setSelectedId(String(convId));
+    setShowProfile(false);
+  }, []);
+
+  // Lắng nghe sự kiện AI_CLIENT_ACTION từ Socket.IO
+  useAiClientActions({ socket, onOpenChat: handleAiOpenChat });
 
   // Khi người dùng click vào Avatar
   const handleOpenProfile = () => {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
 import { authApi } from "../../features/auth/auth.api";
 import { getApiErrorMessage } from "../../lib/api-error";
@@ -26,6 +27,14 @@ export default function UserProfile({ onToggleSidebar, sidebarCollapsed }: { onT
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Trạng thái cho 2FA
+  const [show2FASetupModal, setShow2FASetupModal] = useState(false);
+  const [show2FADisableModal, setShow2FADisableModal] = useState(false);
+  const [twoFactorSecret, setTwoFactorSecret] = useState("");
+  const [twoFactorUri, setTwoFactorUri] = useState("");
+  const [disable2FAMode, setDisable2FAMode] = useState<"APP" | "EMAIL">("APP");
+  const [disable2FACode, setDisable2FACode] = useState("");
+
   // Tham chiếu đến thẻ input file ẩn
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +54,70 @@ export default function UserProfile({ onToggleSidebar, sidebarCollapsed }: { onT
     setIsDark(!isDark);
     window.dispatchEvent(new Event('themeChange'));
   };
+
+  // --- XỬ LÝ 2FA ---
+  const handleSetup2FA = async () => {
+    try {
+      setLoading(true);
+      const res = await authApi.setupTwoFactorAuth();
+      setTwoFactorSecret(res.data.secret);
+      setTwoFactorUri(res.data.uri);
+      setShow2FASetupModal(true);
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinishSetup2FA = () => {
+    if (session) {
+      setSession({ ...session, is2FAEnabled: true });
+    }
+    setShow2FASetupModal(false);
+    alert("Đã bật Xác thực 2 bước (2FA) thành công!");
+  };
+
+  const handleSendDisableOTP = async () => {
+    if (!session?.email) {
+      alert("Không tìm thấy email của bạn.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await authApi.sendOtp({ email: session.email, type: "DISABLE_2FA" });
+      alert("Đã gửi mã OTP về email của bạn!");
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!disable2FACode) {
+      alert("Vui lòng nhập mã xác nhận!");
+      return;
+    }
+    try {
+      setLoading(true);
+      await authApi.disableTwoFactorAuth({
+        totpCode: disable2FAMode === "APP" ? disable2FACode : undefined,
+        code: disable2FAMode === "EMAIL" ? disable2FACode : undefined,
+      });
+      if (session) {
+        setSession({ ...session, is2FAEnabled: false });
+      }
+      setShow2FADisableModal(false);
+      setDisable2FACode("");
+      alert("Đã tắt Xác thực 2 bước (2FA) thành công!");
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   // --- XỬ LÝ AVATAR ---
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -747,6 +820,52 @@ export default function UserProfile({ onToggleSidebar, sidebarCollapsed }: { onT
             </div>
 
           </div>
+
+          <div className="info-grid-expansive" style={{ gridTemplateColumns: "1fr", marginTop: "16px" }}>
+            {/* Xác thực 2 bước (2FA) */}
+            <div className="info-group-expansive">
+              <span className="info-card-label">XÁC THỰC 2 BƯỚC (2FA)</span>
+              <div className="info-card-value-box" style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center" 
+              }}>
+                <span style={{ 
+                  color: session?.is2FAEnabled ? "#10b981" : "#ef4444", 
+                  fontWeight: "bold", 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: "6px" 
+                }}>
+                  {session?.is2FAEnabled ? (
+                    <>
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L3 7l.2 12C4 22.5 12 24 12 24s8-1.5 8.8-5l.2-12-9-5zm-1 14.5l-4-4 1.5-1.5 2.5 2.5 6-6 1.5 1.5-7.5 7.5z"/></svg> Đang bật
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L3 7l.2 12C4 22.5 12 24 12 24s8-1.5 8.8-5l.2-12-9-5zm4 11l-1.5 1.5L12 12.5 9.5 15 8 13.5l2.5-2.5L8 8.5 9.5 7 12 9.5 14.5 7 16 8.5 13.5 11l2.5 2.5z"/></svg> Đang tắt
+                    </>
+                  )}
+                </span>
+                <button 
+                  onClick={() => session?.is2FAEnabled ? setShow2FADisableModal(true) : handleSetup2FA()}
+                  disabled={loading}
+                  style={{ 
+                    background: session?.is2FAEnabled ? "transparent" : "#10b981", 
+                    border: session?.is2FAEnabled ? `1px solid ${isDark ? "#64748b" : "#cbd5e1"}` : "none", 
+                    color: session?.is2FAEnabled ? (isDark ? "#94a3b8" : "#64748b") : "#fff", 
+                    padding: "6px 16px", 
+                    borderRadius: "8px", 
+                    cursor: "pointer", 
+                    fontSize: "14px", 
+                    fontWeight: "bold" 
+                  }}
+                >
+                  {session?.is2FAEnabled ? "Tắt" : "Bật"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -900,6 +1019,190 @@ export default function UserProfile({ onToggleSidebar, sidebarCollapsed }: { onT
                 }}
               >
                 {loading ? "Đang xử lý..." : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL BẬT 2FA */}
+      {show2FASetupModal && (
+        <div style={{
+          position: "fixed", 
+          inset: 0, 
+          zIndex: 9999,
+          background: "rgba(0,0,0,0.7)", 
+          display: "flex",
+          alignItems: "center", 
+          justifyContent: "center",
+        }}>
+          <div style={{
+            background: isDark 
+              ? "linear-gradient(160deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)"
+              : "linear-gradient(160deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)",
+            borderRadius: "24px", 
+            padding: "32px", 
+            width: "420px",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.6)",
+            border: isDark ? "1px solid rgba(139,92,246,0.3)" : "1px solid rgba(139,92,246,0.2)",
+            textAlign: "center"
+          }}>
+            <h3 style={{ color: isDark ? "#fff" : "#0f172a", margin: "0 0 16px", fontSize: "1.3rem" }}>
+              Bật Xác thực 2 bước (2FA)
+            </h3>
+            <p style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.9rem", marginBottom: "24px" }}>
+              Sử dụng ứng dụng Google Authenticator hoặc Authy để quét mã QR bên dưới.
+            </p>
+            
+            <div style={{ background: "#fff", padding: "16px", display: "inline-block", borderRadius: "16px", marginBottom: "24px" }}>
+              {twoFactorUri && <QRCodeSVG value={twoFactorUri} size={180} />}
+            </div>
+
+            <div style={{ marginBottom: "24px" }}>
+              <span style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.85rem" }}>Hoặc nhập mã thiết lập thủ công:</span>
+              <div style={{
+                background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", 
+                padding: "12px", 
+                borderRadius: "8px", 
+                marginTop: "8px",
+                fontFamily: "monospace",
+                color: isDark ? "#fff" : "#0f172a",
+                fontWeight: "bold",
+                letterSpacing: "1px",
+                wordBreak: "break-all"
+              }}>
+                {twoFactorSecret}
+              </div>
+            </div>
+
+            <button 
+              onClick={handleFinishSetup2FA}
+              style={{
+                width: "100%", 
+                padding: "14px", 
+                borderRadius: "12px",
+                background: "#10b981", 
+                border: "none",
+                color: "#fff", 
+                cursor: "pointer", 
+                fontSize: "1rem", 
+                fontWeight: "600",
+              }}
+            >
+              Tôi đã thiết lập xong
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TẮT 2FA */}
+      {show2FADisableModal && (
+        <div style={{
+          position: "fixed", 
+          inset: 0, 
+          zIndex: 9999,
+          background: "rgba(0,0,0,0.7)", 
+          display: "flex",
+          alignItems: "center", 
+          justifyContent: "center",
+        }}>
+          <div style={{
+            background: isDark 
+              ? "linear-gradient(160deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)"
+              : "linear-gradient(160deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)",
+            borderRadius: "24px", 
+            padding: "32px", 
+            width: "420px",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.6)",
+            border: isDark ? "1px solid rgba(139,92,246,0.3)" : "1px solid rgba(139,92,246,0.2)",
+          }}>
+            <h3 style={{ color: isDark ? "#fff" : "#0f172a", margin: "0 0 16px", fontSize: "1.3rem" }}>
+              Tắt Xác thực 2 bước
+            </h3>
+            
+            {/* Tabs chọn phương thức */}
+            <div style={{ display: "flex", gap: "8px", marginBottom: "20px", background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", padding: "4px", borderRadius: "12px" }}>
+              <button 
+                onClick={() => setDisable2FAMode("APP")}
+                style={{ 
+                  flex: 1, padding: "8px 0", borderRadius: "8px", border: "none", cursor: "pointer",
+                  background: disable2FAMode === "APP" ? "#7c5cff" : "transparent",
+                  color: disable2FAMode === "APP" ? "#fff" : (isDark ? "#94a3b8" : "#64748b"),
+                  fontWeight: disable2FAMode === "APP" ? "bold" : "normal"
+                }}
+              >
+                Mã Authenticator
+              </button>
+              <button 
+                onClick={() => setDisable2FAMode("EMAIL")}
+                style={{ 
+                  flex: 1, padding: "8px 0", borderRadius: "8px", border: "none", cursor: "pointer",
+                  background: disable2FAMode === "EMAIL" ? "#7c5cff" : "transparent",
+                  color: disable2FAMode === "EMAIL" ? "#fff" : (isDark ? "#94a3b8" : "#64748b"),
+                  fontWeight: disable2FAMode === "EMAIL" ? "bold" : "normal"
+                }}
+              >
+                Mã Email
+              </button>
+            </div>
+
+            <p style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.9rem", marginBottom: "16px" }}>
+              {disable2FAMode === "APP" 
+                ? "Vui lòng nhập mã 6 số từ ứng dụng Authenticator của bạn." 
+                : "Vui lòng nhấn nút Gửi mã để nhận OTP qua email của bạn."}
+            </p>
+
+            {disable2FAMode === "EMAIL" && (
+              <button 
+                onClick={handleSendDisableOTP}
+                disabled={loading}
+                style={{ 
+                  background: "transparent", border: `1px solid ${isDark ? "#64748b" : "#cbd5e1"}`, 
+                  color: isDark ? "#e2e8f0" : "#475569", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", marginBottom: "16px", width: "100%" 
+                }}
+              >
+                Gửi mã OTP về email
+              </button>
+            )}
+
+            <div style={{ marginBottom: "24px" }}>
+              <input 
+                type="text" 
+                placeholder="Nhập mã 6 số..."
+                value={disable2FACode}
+                onChange={(e) => setDisable2FACode(e.target.value)}
+                disabled={loading}
+                maxLength={6}
+                style={{
+                  width: "100%", padding: "12px 16px", borderRadius: "12px",
+                  background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", 
+                  border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
+                  color: isDark ? "#fff" : "#0f172a", fontSize: "1rem", outline: "none", textAlign: "center", letterSpacing: "4px"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button 
+                onClick={() => { setShow2FADisableModal(false); setDisable2FACode(""); }}
+                disabled={loading}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: "12px", background: "transparent", 
+                  border: isDark ? "1px solid #64748b" : "1px solid #cbd5e1",
+                  color: isDark ? "#94a3b8" : "#64748b", cursor: "pointer", fontSize: "1rem", fontWeight: "600",
+                }}
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={handleDisable2FA}
+                disabled={loading}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: "12px", background: "#ef4444", 
+                  border: "none", color: "#fff", cursor: "pointer", fontSize: "1rem", fontWeight: "600",
+                }}
+              >
+                {loading ? "Đang xử lý..." : "Tắt 2FA"}
               </button>
             </div>
           </div>
