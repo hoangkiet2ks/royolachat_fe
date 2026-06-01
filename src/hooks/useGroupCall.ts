@@ -114,7 +114,7 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
       }
     };
     pc.ontrack = (e) => {
-      console.log(`[GroupCall] Received track from user ${userId}`);
+      console.log(`[GroupCall] Received track from user ${userId}, kinds:`, e.streams[0]?.getTracks().map(t => t.kind));
       updateParticipants(prev => {
         const p = prev.get(userId);
         if (p) {
@@ -288,6 +288,7 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
   // Người mới join gửi offer → người đang trong call nhận và gửi answer
   // Cũng xử lý renegotiation khi peer bật camera (PC đã tồn tại)
   const handleOffer = useCallback(async ({ offer, callerId }: { offer: RTCSessionDescriptionInit; callerId: number }) => {
+    console.log(`[GroupCall] handleOffer from ${callerId}, has video in offer: ${offer.sdp?.includes('m=video')}`);
     const stream = localStreamRef.current;
     if (!stream) {
       console.warn(`[GroupCall] localStream null when receiving offer from ${callerId}`);
@@ -342,11 +343,16 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
   }, [socket, createPC, updateParticipants]);
 
   const handleAnswer = useCallback(async ({ answer, answererId }: { answer: RTCSessionDescriptionInit; answererId: number }) => {
+    console.log(`[GroupCall] handleAnswer from ${answererId}`);
     const participant = participantsRef.current.get(answererId);
-    if (!participant?.pc) return;
+    if (!participant?.pc) {
+      console.warn(`[GroupCall] handleAnswer: no PC for ${answererId}`);
+      return;
+    }
     // Chỉ set remote description nếu đang chờ answer (have-local-offer)
     if (participant.pc.signalingState === 'have-local-offer') {
       await participant.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log(`[GroupCall] Remote description set for ${answererId}`);
     } else {
       console.warn(`[GroupCall] handleAnswer: unexpected signalingState ${participant.pc.signalingState} for ${answererId}`);
     }
@@ -354,8 +360,16 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
 
   const handleIceCandidate = useCallback(async ({ candidate, fromUserId }: { candidate: RTCIceCandidateInit; fromUserId: number }) => {
     const participant = participantsRef.current.get(fromUserId);
-    if (!participant?.pc) return;
-    try { await participant.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch { /* ignore */ }
+    if (!participant?.pc) {
+      console.warn(`[GroupCall] handleIceCandidate: no PC for user ${fromUserId}`);
+      return;
+    }
+    try {
+      await participant.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log(`[GroupCall] ICE candidate added for ${fromUserId}`);
+    } catch (err) {
+      console.error(`[GroupCall] ICE candidate error for ${fromUserId}:`, err);
+    }
   }, []);
 
   const handleCallEnded = useCallback(({ fromUserId }: { fromUserId: number }) => {
@@ -436,10 +450,79 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
   }, [socket]);
 
   // ---- Bật camera trong audio call nhóm (chỉ người ấn mới bật) ----
+  // Thêm/hủy video track cho 1 participant cụ thể (dùng khi người đó bật/tắt camera)
+  // @ts-ignore - reserved for future use
+  const renegotiateVideoForParticipant = useCallback(async (userId: number, enable: boolean) => {
+    const participant = participantsRef.current.get(userId);
+    const pc = participant?.pc;
+    if (!pc || !socket) return;
+
+    try {
+      if (enable) {
+        // Lấy video track hiện tại hoặc tạo mới
+        let videoTrack = localStreamRef.current?.getVideoTracks().find(t => t.readyState === 'live');
+        if (!videoTrack && localStreamRef.current) {
+          const videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+          videoTrack = videoStream.getVideoTracks()[0];
+          if (videoTrack) {
+            localStreamRef.current.addTrack(videoTrack);
+            setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+          }
+        }
+        if (!videoTrack) return;
+
+        // Thử replaceTrack trước (nếu đã có sender video)
+        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(videoTrack);
+        } else {
+          // Đóng PC cũ và tạo PC mới với video track (vì addTrack không hoạt động tốt sau renegotiation)
+          pc.close();
+          const newPc = createPC(userId);
+          const stream = localStreamRef.current!;
+          stream.getTracks().forEach(t => newPc.addTrack(t, stream));
+          updateParticipants(prev => {
+            const p = prev.get(userId);
+            if (p) p.pc = newPc;
+            return new Map(prev);
+          });
+        }
+      }
+
+      // Gửi offer để renegotiate
+      const targetPc = participant?.pc || pc;
+      const offer = await targetPc.createOffer();
+      await targetPc.setLocalDescription(offer);
+      socket.emit('call:offer', { targetUserId: userId, offer });
+      console.log(`[GroupCall] renegotiateVideoForParticipant(${userId}, ${enable})`);
+    } catch (err) {
+      console.error(`[GroupCall] renegotiateVideoForParticipant error for ${userId}:`, err);
+    }
+  }, [socket, createPC, updateParticipants]);
+
   const enableCamera = useCallback(async () => {
     if (!localStreamRef.current) return;
     try {
-      // Chỉ xin camera, KHÔNG xin lại mic để giữ nguyên audio track
+      // Nếu đã có video track rồi, chỉ toggle on/off
+      const existingVideoTracks = localStreamRef.current.getVideoTracks();
+      if (existingVideoTracks.length > 0) {
+        const anyEnabled = existingVideoTracks.some(t => t.enabled);
+        existingVideoTracks.forEach(t => (t.enabled = !anyEnabled));
+        setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+
+        // Gửi renegotiation cho tất cả participants để thông báo thay đổi
+        for (const [userId, participant] of participantsRef.current.entries()) {
+          if (!participant.pc) continue;
+          try {
+            const offer = await participant.pc.createOffer();
+            await participant.pc.setLocalDescription(offer);
+            socket?.emit('call:offer', { targetUserId: userId, offer });
+          } catch {}
+        }
+        return;
+      }
+
+      // Lấy video track mới
       const videoOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
       const newVideoTrack = videoOnlyStream.getVideoTracks()[0];
       if (!newVideoTrack) return;
@@ -449,13 +532,25 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
       setCallType('video');
 
-      // Gửi offer renegotiate cho tất cả participants
+      console.log('[GroupCall] Video track added, current tracks in localStream:', localStreamRef.current.getTracks().map(t => t.kind));
+
+      // Renegotiate với tất cả participants
       for (const [userId, participant] of participantsRef.current.entries()) {
-        if (!participant.pc) continue;
+        const pc = participant.pc;
+        if (!pc) continue;
         try {
-          participant.pc.addTrack(newVideoTrack, localStreamRef.current);
-          const offer = await participant.pc.createOffer();
-          await participant.pc.setLocalDescription(offer);
+          // Thêm video track vào PC hiện tại (KHÔNG đóng PC)
+          const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (!videoSender) {
+            pc.addTrack(newVideoTrack, localStreamRef.current);
+            console.log(`[GroupCall] Added video track to PC for ${userId}`);
+          } else {
+            await videoSender.replaceTrack(newVideoTrack);
+            console.log(`[GroupCall] Replaced video track for ${userId}`);
+          }
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
           socket?.emit('call:offer', { targetUserId: userId, offer });
         } catch (err) {
           console.error(`[GroupCall] enableCamera offer error for ${userId}:`, err);
@@ -466,7 +561,7 @@ export function useGroupCall(socket: Socket | null, myUserId: number | undefined
       console.error('[GroupCall] enableCamera error:', err);
       alert('Không thể bật camera. Hãy kiểm tra quyền truy cập.');
     }
-  }, [socket]);
+  }, [socket, createPC, updateParticipants]);
 
   return {
     callState,

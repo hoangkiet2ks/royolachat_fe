@@ -30,7 +30,8 @@ export default function FriendSearch({ onFriendAdded }: FriendSearchProps) {
         setSearchResult(null)
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.response?.data?.error || 'Lỗi tìm kiếm' })
+      const errorMsg = error?.response?.data?.message || error?.response?.data?.error || 'Lỗi tìm kiếm';
+      setMessage({ type: 'error', text: Array.isArray(errorMsg) ? errorMsg[0] : errorMsg });
       setSearchResult(null)
     } finally {
       setLoading(false)
@@ -54,7 +55,8 @@ export default function FriendSearch({ onFriendAdded }: FriendSearchProps) {
         setMessage({ type: 'error', text: response.data.error || 'Không thể gửi lời mời' })
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.response?.data?.error || 'Lỗi gửi lời mời' })
+      const errorMsg = error?.response?.data?.message || error?.response?.data?.error || 'Lỗi gửi lời mời';
+      setMessage({ type: 'error', text: Array.isArray(errorMsg) ? errorMsg[0] : errorMsg });
     } finally {
       setLoading(false)
     }

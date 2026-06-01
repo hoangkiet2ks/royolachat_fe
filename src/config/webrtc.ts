@@ -10,8 +10,8 @@
 const ICE_SERVERS = {
   iceServers: [
     // === TURN (relay) - bắt buộc để xuyên CGNAT (4G Viettel, Vinaphone...) ===
-    { urls: 'turn:18.141.211.167:3478?transport=tcp', username: 'royola', credential: 'hoangkiet1906' },
-    { urls: 'turn:18.141.211.167:3478?transport=udp', username: 'royola', credential: 'hoangkiet1906' },
+    { urls: 'turn:18.141.212.127:3478?transport=tcp', username: 'royola', credential: 'hoangkiet1906' },
+    { urls: 'turn:18.141.212.127:3478?transport=udp', username: 'royola', credential: 'hoangkiet1906' },
 
     // === STUN (fallback) ===
     { urls: 'stun:stun.l.google.com:19302' },

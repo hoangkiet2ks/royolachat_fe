@@ -64,8 +64,9 @@ export function useWebRTC(socket: Socket | null) {
 
     pc.oniceconnectionstatechange = () => {
       console.log('[WebRTC] ICE:', pc.iceConnectionState);
-      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-        setCallStateSynced('connected');
+      // Log ICE state nhưng không dùng để đổi UI state (tránh stuck nếu TURN chậm)
+      if (pc.iceConnectionState === 'failed') {
+        console.warn('[WebRTC] ICE failed — TURN server might be unreachable');
       }
     };
 
@@ -105,11 +106,16 @@ export function useWebRTC(socket: Socket | null) {
 
       socket.emit('call:initiate', { targetUserId, callType: type, callerName: myName, conversationId });
 
-      socket.once('call:answered', async ({ accepted }: { accepted: boolean }) => {
+      socket.once('call:answered', async ({ accepted, answererId }: { accepted: boolean; answererId?: number }) => {
         if (!accepted) { setCallStateSynced('ended'); setTimeout(cleanup, 2000); return; }
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('call:offer', { targetUserId, offer });
+        socket.emit('call:offer', { targetUserId: answererId ?? targetUserId, offer });
+
+        // Chuyển sang connected ngay (không chờ ICE — tránh stuck ở 'calling')
+        setCallStateSynced('connected');
+        console.log('[WebRTC] Offer sent, state → connected');
       });
 
       socket.once('call:unavailable', () => { setCallStateSynced('ended'); setTimeout(cleanup, 2000); });
@@ -143,11 +149,14 @@ export function useWebRTC(socket: Socket | null) {
       const pc = createPC(info.callerId);
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
+      // Set connected ngay để UI hiện màn hình call
+      setCallStateSynced('connected');
+
       // Gửi answer cho caller
       socket.emit('call:answer', { callerId: info.callerId, accepted: true, conversationId: info.conversationId });
 
+      // Nếu offer đã đến trước khi accept (lưu trong pending) → xử lý ngay
       if (pendingOfferRef.current) {
-        // Offer đã đến trước khi accept - xử lý ngay
         const offer = pendingOfferRef.current;
         pendingOfferRef.current = null;
         console.log('[WebRTC] Processing pending offer immediately');
@@ -161,7 +170,6 @@ export function useWebRTC(socket: Socket | null) {
         const waitForOffer = async (data: { offer: RTCSessionDescriptionInit; callerId: number }) => {
           console.log('[WebRTC] waitForOffer triggered, data.callerId:', data.callerId, 'info.callerId:', info.callerId);
           if (data.callerId !== info.callerId) {
-            // Không phải từ caller này, bỏ qua
             console.log('[WebRTC] Ignoring offer from different caller');
             return;
           }
@@ -179,13 +187,16 @@ export function useWebRTC(socket: Socket | null) {
         socket.once('call:offer', waitForOffer);
         setTimeout(() => socket.off('call:offer', waitForOffer), 15000);
       }
+      // Nếu chưa có offer → CallContext sẽ forward qua handleOffer() khi offer đến
+      // KHÔNG đăng ký socket.once ở đây vì CallContext đã có socket.on('call:offer') rồi
+      console.log('[WebRTC] acceptCall done, waiting for offer via CallContext...');
 
     } catch (err) {
       console.error('[WebRTC] acceptCall error:', err);
       alert('Không thể truy cập camera/microphone');
       rejectCall();
     }
-  }, [socket, createPC, getMedia]);
+  }, [socket, createPC, getMedia, setCallStateSynced]);
 
   // ---- CALLEE: nhận offer (từ CallContext listener - dùng cho renegotiation) ----
   const handleOffer = useCallback(async ({ offer, callerId }: { offer: RTCSessionDescriptionInit; callerId: number }) => {

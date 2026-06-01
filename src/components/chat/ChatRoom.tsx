@@ -6,6 +6,7 @@ import EmojiPicker from 'emoji-picker-react';
 
 import { CreatePollModal } from './CreatePollModal';
 import { PollMessage, type PollData } from './PollMessage';
+import { ProfileCard } from '../profile/ProfileCard';
 
 // Cập nhật Interface để chứa Reaction và isPinned
 interface Reaction { id: number; messageId: number; userId: number; emoji: string; }
@@ -31,6 +32,8 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const [showEmoji, setShowEmoji] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+  const [openMenuMessageId, setOpenMenuMessageId] = useState<number | null>(null);
+  const [profileCardUserId, setProfileCardUserId] = useState<number | null>(null);
 
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -137,6 +140,19 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   };
 
   useEffect(() => { fetchChatData(); }, [conversationId, token]);
+
+  // Click outside to close message menu
+  useEffect(() => {
+    if (!openMenuMessageId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.message-menu-popup') && !target.closest('.message-hover-icon')) {
+        setOpenMenuMessageId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuMessageId]);
 
   useEffect(() => {
     if (!socket || !chatInfo) return;
@@ -596,15 +612,17 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
         {/* HEADER */}
         <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-panel)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)', zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {chatInfo?.avatar ? (
-              <img src={chatInfo.avatar} alt="avatar" style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
-            ) : (
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: chatInfo?.isGroup ? 'linear-gradient(135deg, #3b82f6, #2dd4bf)' : 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '1.2rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                {chatInfo?.name?.charAt(0).toUpperCase() || '?'}
-              </div>
-            )}
+            <div style={{ cursor: 'pointer' }} onClick={() => chatInfo?.partnerId && setProfileCardUserId(chatInfo.partnerId)}>
+              {chatInfo?.avatar ? (
+                <img src={chatInfo.avatar} alt="avatar" style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
+              ) : (
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: chatInfo?.isGroup ? 'linear-gradient(135deg, #3b82f6, #2dd4bf)' : 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '1.2rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                  {chatInfo?.name?.charAt(0).toUpperCase() || '?'}
+                </div>
+              )}
+            </div>
             <div>
-              <h3 style={{ color: 'var(--text-main)', margin: 0, fontSize: '1.15rem', fontWeight: 600 }}>{chatInfo?.name || 'Đang tải...'}</h3>
+              <h3 style={{ color: 'var(--text-main)', margin: 0, fontSize: '1.15rem', fontWeight: 600, cursor: 'pointer' }} onClick={() => chatInfo?.partnerId && setProfileCardUserId(chatInfo.partnerId)}>{chatInfo?.name || 'Đang tải...'}</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                 {!chatInfo?.isGroup && (
                   <>
@@ -704,51 +722,8 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
 
             const senderAvatar = msg.sender?.avatar || (!chatInfo?.isGroup ? chatInfo?.avatar : null);
 
-            // =============================================
-            // HOVER MENU - ĐÃ THÊM NÚT REPLY
-            // =============================================
-            const renderHoverMenu = () => (
-              <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-panel)', padding: '4px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)', zIndex: 20 }}>
-                {/* CHỌN EMOJI NHANH */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '6px', marginRight: '2px' }}>
-                  {['👍', '❤️', '😆', '😮', '😢'].map(emoji => (
-                    <div
-                      key={emoji}
-                      onClick={() => handleToggleReaction(msg.id, emoji)}
-                      style={{ cursor: 'pointer', fontSize: '1.2rem', transition: 'transform 0.1s' }}
-                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      {emoji}
-                    </div>
-                  ))}
-                </div>
-
-                {/* NÚT REPLY ← MỚI THÊM */}
-                <div
-                  onClick={() => { setReplyingTo(msg); setHoveredMessageId(null); }}
-                  style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px', transition: 'background 0.15s' }}
-                  title="Trả lời"
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.1)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                  </svg>
-                </div>
-
-                <div onClick={() => handleTogglePin(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: msg.isPinned ? '#f59e0b' : 'var(--text-sub)', borderRadius: '8px' }} title={msg.isPinned ? "Bỏ ghim" : "Ghim tin nhắn"}>
-                  <svg width="16" height="16" fill={msg.isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M17.5 11.5l2.5 2.5-4 4-2.5-2.5M6.5 11.5L4 14l4 4 2.5-2.5" /></svg>
-                </div>
-
-                <div onClick={() => openForwardModal(msg)} style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px' }} title="Chuyển tiếp"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg></div>
-                {isMe && <div onClick={() => handleRecall(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-sub)', borderRadius: '8px' }} title="Thu hồi"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg></div>}
-                <div onClick={() => handleDelete(msg.id)} style={{ padding: '6px', cursor: 'pointer', color: '#ef4444', borderRadius: '8px' }} title="Xóa"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></div>
-              </div>
-            );
-
             return (
-              <div key={index} onMouseEnter={() => setHoveredMessageId(msg.id)} onMouseLeave={() => setHoveredMessageId(null)} style={{ display: 'flex', gap: '10px', alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', position: 'relative', marginBottom: msg.reactions && msg.reactions.length > 0 ? '12px' : '0' }}>
+              <div key={index} onMouseEnter={() => setHoveredMessageId(msg.id)} onMouseLeave={() => { if (openMenuMessageId !== msg.id) setHoveredMessageId(null); }} style={{ display: 'flex', gap: '10px', alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', position: 'relative', marginBottom: msg.reactions && msg.reactions.length > 0 ? '12px' : '0' }}>
 
                 {/* Avatar */}
                 {!isMe && (
@@ -769,13 +744,10 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                   {/* Tên người gửi */}
                   {chatInfo?.isGroup && !isMe && showAvatar && <span style={{ fontSize: '12px', color: 'var(--text-sub)', marginBottom: '6px', marginLeft: '4px', fontWeight: 500 }}>{msg.sender?.name}</span>}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-                    {/* Menu bên trái (nếu là mình) */}
-                    {isMe && hoveredMessageId === msg.id && !isMsgRecalled && renderHoverMenu()}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: '4px' }}>
 
                     {/* BONG BÓNG TIN NHẮN */}
-                    <div style={{
+                    <div id={`msg-${msg.id}`} style={{
                       padding: msg.type === 'IMAGE' && !isMsgRecalled ? '4px' : (msg.type === 'POLL' ? '0' : '12px 18px'),
                       background: msg.type === 'POLL' || isMsgRecalled ? 'transparent' : (isMe ? 'var(--msg-me-bg)' : 'var(--msg-other-bg)'),
                       color: isMsgRecalled ? 'var(--text-sub)' : (isMe ? 'var(--msg-me-text)' : 'var(--msg-other-text)'),
@@ -863,8 +835,240 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                       )}
                     </div>
 
-                    {/* Menu bên phải (nếu là người khác) */}
-                    {!isMe && hoveredMessageId === msg.id && !isMsgRecalled && renderHoverMenu()}
+                    {/* SMART REPLY RESULTS - shown below bubble when available */}
+                    {!isMe && !isMsgRecalled && msg.type === 'TEXT' && (
+                      <>
+                        {smartReplyLoading === msg.id && (
+                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '14px', height: '14px', border: '2px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                            <span style={{ color: 'var(--text-sub)', fontSize: '0.8rem', fontStyle: 'italic' }}>Đang gợi ý...</span>
+                          </div>
+                        )}
+                        {smartReplyError === msg.id && (
+                          <span style={{ marginTop: '4px', color: '#ef4444', fontSize: '0.8rem' }}>Không có gợi ý</span>
+                        )}
+                        {smartReplies && smartReplies.messageId === msg.id && smartReplies.replies.length > 0 && (
+                          <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {smartReplies.replies.map((reply, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => { setInputText(reply); setSmartReplies(null); }}
+                                style={{
+                                  background: 'rgba(139,92,246,0.08)',
+                                  border: '1px solid rgba(139,92,246,0.3)',
+                                  color: '#8b5cf6',
+                                  borderRadius: '12px',
+                                  padding: '5px 12px',
+                                  fontSize: '0.82rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 500,
+                                  transition: 'all 0.2s',
+                                  maxWidth: '200px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {reply}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* HOVER ICON & POPUP MENU - below bubble, shown on hover/click */}
+                    {!isMsgRecalled && hoveredMessageId === msg.id && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        {/* SMALL HOVER ICON */}
+                        <div
+                          className="message-hover-icon"
+                          onClick={(e) => { e.stopPropagation(); setOpenMenuMessageId(openMenuMessageId === msg.id ? null : msg.id); }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '50%',
+                            background: 'var(--bg-panel)',
+                            boxShadow: 'var(--shadow-sm)',
+                            border: '1px solid var(--border-color)',
+                            cursor: 'pointer',
+                            transition: 'transform 0.15s ease',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--text-sub)' }}>
+                            <circle cx="5" cy="12" r="2" />
+                            <circle cx="12" cy="12" r="2" />
+                            <circle cx="19" cy="12" r="2" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* FULL POPUP MENU */}
+                    {openMenuMessageId === msg.id && !isMsgRecalled && (
+                      <div
+                        className="message-menu-popup"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          background: 'var(--bg-panel)',
+                          padding: '6px 8px',
+                          borderRadius: '16px',
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                          border: '1px solid var(--border-color)',
+                          zIndex: 50,
+                          animation: 'menuPopupIn 0.15s ease',
+                        }}
+                      >
+                        {/* QUICK REACTIONS */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', paddingRight: '8px', borderRight: '1px solid var(--border-color)', marginRight: '4px' }}>
+                          {['👍', '❤️', '😆', '😮', '😢'].map(emoji => (
+                            <div
+                              key={emoji}
+                              onClick={() => { handleToggleReaction(msg.id, emoji); setOpenMenuMessageId(null); }}
+                              style={{ cursor: 'pointer', fontSize: '1.2rem', padding: '4px 5px', borderRadius: '8px', transition: 'transform 0.1s, background 0.1s' }}
+                              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.2)'; e.currentTarget.style.background = 'var(--hover-bg)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'transparent'; }}
+                            >
+                              {emoji}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* AI BUTTON - Smart Reply */}
+                        {!isMe && msg.type === 'TEXT' && (
+                          <div
+                            onClick={() => {
+                              handleSmartReply(msg.id, msg.content || '');
+                            }}
+                            style={{ padding: '6px', cursor: 'pointer', color: '#f59e0b', borderRadius: '8px', transition: 'background 0.15s' }}
+                            title="Gợi ý trả lời"
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(245,158,11,0.15)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            {smartReplyLoading === msg.id ? (
+                              <div style={{ width: '14px', height: '14px', border: '2px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                            ) : (
+                              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ANALYZE IMAGE BUTTON - for image messages */}
+                        {msg.type === 'IMAGE' && msg.fileUrl && (
+                          <div
+                            onClick={() => {
+                              if (!socket) return;
+                              setBotTyping(true);
+                              socket.emit('analyzeGroupImage', {
+                                conversationId,
+                                imageUrl: msg.fileUrl,
+                                task: 'analyze',
+                              });
+                              setOpenMenuMessageId(null);
+                            }}
+                            style={{ padding: '6px', cursor: 'pointer', color: '#8b5cf6', borderRadius: '8px', transition: 'background 0.15s' }}
+                            title="Phân tích ảnh"
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.15)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* REPLY */}
+                        <div
+                          onClick={() => { setReplyingTo(msg); setOpenMenuMessageId(null); }}
+                          style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px', transition: 'background 0.15s' }}
+                          title="Trả lời"
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.15)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                          </svg>
+                        </div>
+
+                        {/* PIN */}
+                        <div
+                          onClick={() => handleTogglePin(msg.id)}
+                          style={{ padding: '6px', cursor: 'pointer', color: msg.isPinned ? '#f59e0b' : 'var(--text-sub)', borderRadius: '8px', transition: 'background 0.15s' }}
+                          title={msg.isPinned ? "Bỏ ghim" : "Ghim tin nhắn"}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <svg width="16" height="16" fill={msg.isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+                          </svg>
+                        </div>
+
+                        {/* FORWARD */}
+                        <div
+                          onClick={() => openForwardModal(msg)}
+                          style={{ padding: '6px', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px', transition: 'background 0.15s' }}
+                          title="Chuyển tiếp"
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.15)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12l6-6m0 0l6 6m-6-6v12" />
+                          </svg>
+                        </div>
+
+                        {/* COPY */}
+                        <div
+                          onClick={() => { navigator.clipboard.writeText(msg.content || ''); setOpenMenuMessageId(null); }}
+                          style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-sub)', borderRadius: '8px', transition: 'background 0.15s' }}
+                          title="Sao chép"
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+                          </svg>
+                        </div>
+
+                        {/* DELETE */}
+                        {isMe && (
+                          <div
+                            onClick={() => handleDelete(msg.id)}
+                            style={{ padding: '6px', cursor: 'pointer', color: '#ef4444', borderRadius: '8px', transition: 'background 0.15s' }}
+                            title="Xóa"
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* UNSEND */}
+                        {isMe && (
+                          <div
+                            onClick={() => handleRecall(msg.id)}
+                            style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-sub)', borderRadius: '8px', transition: 'background 0.15s' }}
+                            title="Thu hồi"
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* REACTIONS — nằm dưới bubble, không dùng absolute */}
@@ -889,64 +1093,6 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                     </div>
                   )}
 
-                  {/* SMART REPLY — rút gọn thành icon bóng đèn */}
-                  {!isMe && !isMsgRecalled && msg.type === 'TEXT' && msg.sender && !(msg.sender as any).isBot && (
-                    <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
-                      <button
-                        onClick={() => handleSmartReply(msg.id, msg.content)}
-                        disabled={smartReplyLoading === msg.id}
-                        title="Gợi ý trả lời"
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid var(--border-color)',
-                          color: smartReplyError === msg.id ? '#ef4444' : 'var(--text-sub)',
-                          borderColor: smartReplyError === msg.id ? '#ef4444' : 'var(--border-color)',
-                          borderRadius: '50%',
-                          width: '26px',
-                          height: '26px',
-                          padding: '0',
-                          fontSize: '0.85rem',
-                          cursor: smartReplyLoading === msg.id ? 'wait' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        {smartReplyLoading === msg.id ? (
-                          <div style={{ width: '10px', height: '10px', border: '2px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                        ) : smartReplyError === msg.id ? '⚠️' : '💡'}
-                      </button>
-
-                      {smartReplies && smartReplies.messageId === msg.id && smartReplies.replies.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {smartReplies.replies.map((reply, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => { setInputText(reply); setSmartReplies(null); }}
-                              style={{
-                                background: 'rgba(139,92,246,0.08)',
-                                border: '1px solid rgba(139,92,246,0.3)',
-                                color: '#8b5cf6',
-                                borderRadius: '12px',
-                                padding: '5px 12px',
-                                fontSize: '0.82rem',
-                                cursor: 'pointer',
-                                fontWeight: 500,
-                                transition: 'all 0.2s',
-                                maxWidth: '200px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {reply}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -1198,7 +1344,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                       const isUserOnline = isMe || onlineStatuses[member.id];
                       return (
                         <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ position: 'relative' }}>
+                          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setProfileCardUserId(member.id)}>
                             {member.avatar ? (
                               <img src={member.avatar} alt="avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
                             ) : (
@@ -1206,7 +1352,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                             )}
                             {isUserOnline && <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '12px', height: '12px', borderRadius: '50%', background: '#10b981', border: '2px solid var(--bg-panel)' }}></div>}
                           </div>
-                          <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ flex: 1, overflow: 'hidden', cursor: 'pointer' }} onClick={() => setProfileCardUserId(member.id)}>
                             <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{member.name} {isMe && <span style={{ color: 'var(--text-sub)', fontWeight: 'normal' }}>(Bạn)</span>}</div>
                             {member.role !== 'MEMBER' && <div style={{ fontSize: '0.75rem', color: member.role === 'ADMIN' ? '#ef4444' : '#f59e0b', fontWeight: 600, marginTop: '2px' }}>{member.role === 'ADMIN' ? 'Trưởng nhóm' : 'Phó nhóm'}</div>}
                           </div>
@@ -1434,6 +1580,14 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
         onClose={() => setShowCreatePollModal(false)}
         onSubmit={handleCreatePoll}
       />
+
+      {/* Profile Card Popup */}
+      {profileCardUserId && (
+        <ProfileCard
+          userId={profileCardUserId}
+          onClose={() => setProfileCardUserId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -42,6 +42,24 @@ export default function GroupCallModal({
   // Track userId nào đã hết timeout 15s (chưa tham gia) → ẩn tile
   const [timedOutUsers, setTimedOutUsers] = useState<Set<number>>(new Set());
 
+  // Sync isCamOff khi callType thay đổi (audio → video khi bật camera)
+  useEffect(() => {
+    if (callType === 'video') setIsCamOff(false);
+  }, [callType]);
+
+  // Sync isCamOff với trạng thái thực của video tracks
+  useEffect(() => {
+    if (!localStream) return;
+    const videoTracks = localStream.getVideoTracks();
+    if (videoTracks.length === 0) {
+      setIsCamOff(false); // Không có camera
+    } else {
+      // Video track tồn tại → sync với trạng thái thực
+      const allDisabled = videoTracks.every(t => !t.enabled);
+      setIsCamOff(allDisabled);
+    }
+  }, [localStream]);
+
   // Timeout 15s: tự động từ chối nếu không tham gia
   useEffect(() => {
     if (callState !== 'incoming') { return; }
@@ -241,7 +259,7 @@ export default function GroupCallModal({
           borderTop: '1px solid rgba(255,255,255,0.1)',
         }}>
           <ControlBtn icon={isMuted ? micOffIcon : micIcon} onClick={toggleMute} active={isMuted} />
-          {callType === 'video' ? (
+          {callType === 'video' || (localStream?.getVideoTracks().length && localStream.getVideoTracks().some(t => t.enabled)) ? (
             <ControlBtn icon={isCamOff ? camOffIcon : camIcon} onClick={toggleCam} active={isCamOff} />
           ) : (
             // Nút bật cam trong audio call — chỉ người ấn mới bật cam của họ
