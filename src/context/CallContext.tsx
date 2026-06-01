@@ -38,6 +38,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
     const onCallIncoming = (info: any) => {
       console.log('[CallContext] Incoming call:', info);
+      console.log('[CallContext] Routing: isGroup=', info.isGroup);
       if (info.isGroup) {
         groupCallRef.current.handleIncoming(info);
       } else {
@@ -45,40 +46,63 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const onUserJoined = (data: any) => groupCallRef.current.handleUserJoined(data);
-
-    const onCurrentParticipants = (data: any) => groupCallRef.current.handleCurrentParticipants(data);
+    const onOffer = (data: any) => {
+      console.log('[CallContext] Received offer, groupCall state:', groupCallRef.current.callState, ', callerId:', data.callerId);
+      if (groupCallRef.current.callState !== 'idle' && groupCallRef.current.callState !== 'calling') {
+        console.log('[CallContext] Routing offer to groupCall');
+        groupCallRef.current.handleOffer(data);
+      } else if (webrtcRef.current.callState !== 'idle') {
+        console.log('[CallContext] Routing offer to webrtc');
+        webrtcRef.current.handleOffer(data);
+      } else {
+        console.log('[CallContext] Routing offer to groupCall (default)');
+        groupCallRef.current.handleOffer(data);
+      }
+    };
 
     const onWebRTCAnswer = (data: any) => {
-      if (groupCallRef.current.callState !== 'idle') {
+      console.log('[CallContext] Received answer, data:', data, 'groupCall state:', groupCallRef.current.callState, ', webrtc state:', webrtcRef.current.callState);
+      if (groupCallRef.current.callState !== 'idle' && groupCallRef.current.callState !== 'calling') {
+        console.log('[CallContext] Routing answer to groupCall');
         groupCallRef.current.handleAnswer(data);
-      } else {
+      } else if (webrtcRef.current.callState !== 'idle') {
+        console.log('[CallContext] Routing answer to webrtc');
         webrtcRef.current.handleWebRTCAnswer(data);
+      } else {
+        console.log('[CallContext] Routing answer to groupCall (default)');
+        groupCallRef.current.handleAnswer(data);
       }
     };
 
     const onIceCandidate = (data: any) => {
-      if (groupCallRef.current.callState !== 'idle') {
+      if (groupCallRef.current.callState !== 'idle' && groupCallRef.current.callState !== 'calling') {
         groupCallRef.current.handleIceCandidate(data);
-      } else {
+      } else if (webrtcRef.current.callState !== 'idle') {
         webrtcRef.current.handleIceCandidate(data);
+      } else {
+        groupCallRef.current.handleIceCandidate(data);
       }
     };
 
     const onCallEnded = (data: any) => {
-      if (groupCallRef.current.callState !== 'idle') {
+      console.log('[CallContext] Call ended, groupCall state:', groupCallRef.current.callState, ', webrtc state:', webrtcRef.current.callState);
+      if (groupCallRef.current.callState !== 'idle' && groupCallRef.current.callState !== 'calling') {
         groupCallRef.current.handleCallEnded(data);
-      } else {
+      } else if (webrtcRef.current.callState !== 'idle') {
         webrtcRef.current.handleCallEnded();
+      } else {
+        groupCallRef.current.handleCallEnded(data);
       }
     };
 
-    const onOffer = (data: any) => {
-      if (groupCallRef.current.callState !== 'idle') {
-        groupCallRef.current.handleOffer(data);
-      } else {
-        webrtcRef.current.handleOffer(data);
-      }
+    const onUserJoined = (data: any) => {
+      console.log('[CallContext] User joined:', data, 'groupCall state:', groupCallRef.current.callState);
+      groupCallRef.current.handleUserJoined(data);
+    };
+
+    const onCurrentParticipants = (data: any) => {
+      console.log('[CallContext] Current participants:', data);
+      groupCallRef.current.handleCurrentParticipants(data);
     };
 
     const onSwitchToVideo = () => webrtcRef.current.handleSwitchToVideo();

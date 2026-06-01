@@ -7,12 +7,16 @@ export const useChatSocket = (token: string | null) => {
   useEffect(() => {
     if (!token) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL; // Lấy URL từ file .env
+    const apiUrl = import.meta.env.VITE_API_URL;
 
-    // Kết nối Socket với namespace /chat
+    const isAndroid = /android/i.test(navigator.userAgent);
+
+    // Capacitor Android: dùng polling thay vì websocket (WebSocket trong WebView không ổn định)
+    const transports = isAndroid ? ['polling', 'websocket'] : ['polling', 'websocket'];
+
     const socketInstance = io(`${apiUrl}/chat`, {
       auth: { token: `Bearer ${token}` },
-      transports: ['polling', 'websocket'],
+      transports,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,

@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
+import ICE_SERVERS from '../config/webrtc';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ended';
 
@@ -22,13 +23,6 @@ interface IncomingCallInfo {
 }
 
 type ParticipantInfo = { userId: number; name: string; avatar?: string | null };
-
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
-};
 
 export function useGroupCall(socket: Socket | null, myUserId: number | undefined) {
   const [callState, setCallState] = useState<CallState>('idle');

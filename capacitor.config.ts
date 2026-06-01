@@ -18,13 +18,15 @@ const config: CapacitorConfig = {
   },
   android: {
     // Cho phép WebRTC hoạt động trong WebView
-    allowMixedContent: false,
+    allowMixedContent: true,
     captureInput: true,
-    webContentsDebuggingEnabled: false,
+    webContentsDebuggingEnabled: true,
+    backgroundColor: "#0f172a",
   },
   server: {
-    // URL backend production
     androidScheme: 'https',
+    hostname: 'app',
+    cleartext: false,
   },
 };
 

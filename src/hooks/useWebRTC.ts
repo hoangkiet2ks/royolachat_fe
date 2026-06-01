@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
+import ICE_SERVERS from '../config/webrtc';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ended';
 
@@ -9,13 +10,6 @@ interface IncomingCallInfo {
   callType: 'audio' | 'video';
   conversationId: number;
 }
-
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
-};
 
 export function useWebRTC(socket: Socket | null) {
   const [callState, setCallState] = useState<CallState>('idle');
@@ -138,7 +132,11 @@ export function useWebRTC(socket: Socket | null) {
   // ---- CALLEE: chấp nhận ----
   const acceptCall = useCallback(async () => {
     const info = incomingCallRef.current;
-    if (!socket || !info) return;
+    if (!socket || !info) {
+      console.log('[WebRTC] acceptCall: missing socket or info', { socket: !!socket, info });
+      return;
+    }
+    console.log('[WebRTC] acceptCall: accepting call from', info.callerId, 'callType:', info.callType);
 
     try {
       const stream = await getMedia(info.callType);
@@ -161,8 +159,10 @@ export function useWebRTC(socket: Socket | null) {
         // Chờ offer đến từ caller
         console.log('[WebRTC] Waiting for offer from caller...');
         const waitForOffer = async (data: { offer: RTCSessionDescriptionInit; callerId: number }) => {
+          console.log('[WebRTC] waitForOffer triggered, data.callerId:', data.callerId, 'info.callerId:', info.callerId);
           if (data.callerId !== info.callerId) {
             // Không phải từ caller này, bỏ qua
+            console.log('[WebRTC] Ignoring offer from different caller');
             return;
           }
           console.log('[WebRTC] Got offer, creating answer...');
@@ -190,14 +190,15 @@ export function useWebRTC(socket: Socket | null) {
   // ---- CALLEE: nhận offer (từ CallContext listener - dùng cho renegotiation) ----
   const handleOffer = useCallback(async ({ offer, callerId }: { offer: RTCSessionDescriptionInit; callerId: number }) => {
     const pc = pcRef.current;
+    const callerIdNum = Number(callerId);
 
     // Nếu đang connected -> renegotiation (switch to video)
-    if (callStateRef.current === 'connected' && pc && partnerIdRef.current === callerId) {
+    if (callStateRef.current === 'connected' && pc && partnerIdRef.current === callerIdNum) {
       console.log('[WebRTC] Renegotiation offer received');
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket?.emit('call:webrtc-answer', { callerId, answer });
+      socket?.emit('call:webrtc-answer', { callerId: callerIdNum, answer });
       return;
     }
 
@@ -209,12 +210,15 @@ export function useWebRTC(socket: Socket | null) {
     }
 
     // Nếu PC đã sẵn sàng (đang trong acceptCall flow)
-    if (pc && incomingCallRef.current?.callerId === callerId) {
+    if (pc && incomingCallRef.current?.callerId === callerIdNum) {
       console.log('[WebRTC] handleOffer: PC ready, processing offer');
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket?.emit('call:webrtc-answer', { callerId, answer });
+      socket?.emit('call:webrtc-answer', { callerId: callerIdNum, answer });
+      console.log('[WebRTC] Answer sent via handleOffer');
+    } else {
+      console.log('[WebRTC] handleOffer: PC not ready or callerId mismatch. pc:', !!pc, 'incomingCall:', incomingCallRef.current?.callerId, 'offerCallerId:', callerIdNum, 'callState:', callStateRef.current);
     }
   }, [socket]);
 
@@ -235,10 +239,10 @@ export function useWebRTC(socket: Socket | null) {
   }, [socket, cleanup, setCallStateSynced]);
 
   // ---- Caller nhận answer ----
-  const handleWebRTCAnswer = useCallback(async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
+  const handleWebRTCAnswer = useCallback(async ({ answer, answererId }: { answer: RTCSessionDescriptionInit; answererId?: number }) => {
     const pc = pcRef.current;
-    if (!pc) return;
-    console.log('[WebRTC] Received answer, signalingState:', pc.signalingState);
+    if (!pc) { console.log('[WebRTC] handleWebRTCAnswer: no PC'); return; }
+    console.log('[WebRTC] Received answer, answererId:', answererId, 'signalingState:', pc.signalingState);
     try {
       if (pc.signalingState === 'have-local-offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
