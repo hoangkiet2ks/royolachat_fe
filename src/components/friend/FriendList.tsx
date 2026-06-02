@@ -12,6 +12,7 @@ export default function FriendList({ refreshTrigger, onStartChat }: FriendListPr
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<number | null>(null)
+  const [blockingId, setBlockingId] = useState<number | null>(null)
   const [hoveredId, setHoveredId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -36,8 +37,7 @@ export default function FriendList({ refreshTrigger, onStartChat }: FriendListPr
   }
 
   const handleRemoveFriend = async (friendId: number, friendName: string, e: React.MouseEvent) => {
-    e.stopPropagation() // Ngăn không cho trigger onClick của parent
-    
+    e.stopPropagation()
     if (!window.confirm(`Bạn có chắc muốn xóa ${friendName} khỏi danh sách bạn bè?`)) {
       return
     }
@@ -54,6 +54,22 @@ export default function FriendList({ refreshTrigger, onStartChat }: FriendListPr
       alert(err?.response?.data?.error || 'Lỗi xóa bạn bè')
     } finally {
       setRemovingId(null)
+    }
+  }
+
+  const handleBlockFriend = async (friend: UserProfile, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(`Bạn có chắc muốn chặn ${friend.name}? Họ sẽ không thể nhắn tin hoặc gọi điện cho bạn.`)) return
+
+    setBlockingId(friend.id)
+    try {
+      await friendApi.blockUser(friend.id)
+      setFriends(friends.filter(f => f.id !== friend.id))
+      alert(`${friend.name} đã bị chặn.`)
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Chặn thất bại.')
+    } finally {
+      setBlockingId(null)
     }
   }
 
@@ -140,7 +156,28 @@ export default function FriendList({ refreshTrigger, onStartChat }: FriendListPr
                 >
                   Chat
                 </button>
-                <button 
+                <button
+                  onClick={(e) => handleBlockFriend(friend, e)}
+                  disabled={blockingId === friend.id}
+                  style={{
+                    background: '#450a0a',
+                    color: '#fca5a5',
+                    border: '1px solid #7f1d1d',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    cursor: blockingId === friend.id ? 'not-allowed' : 'pointer',
+                    opacity: blockingId === friend.id ? 0.5 : 1,
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                  title="Chặn người dùng"
+                >
+                  {blockingId === friend.id ? '...' : (
+                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                  )}
+                </button>
+                <button
                   onClick={(e) => handleRemoveFriend(friend.id, friend.name, e)}
                   disabled={removingId === friend.id}
                   style={{ 

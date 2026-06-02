@@ -83,4 +83,34 @@ export const friendApi = {
       { friendId },
     )
   },
+
+  // ==========================================
+  // BLOCK / UNBLOCK
+  // ==========================================
+  blockUser(userId: number) {
+    return http.post<{ success: boolean; data?: { message: string }; error?: string | null }>(
+      '/friend/block',
+      { userId },
+    )
+  },
+
+  unblockUser(userId: number) {
+    return http.post<{ success: boolean; data?: { message: string }; error?: string | null }>(
+      '/friend/unblock',
+      { userId },
+    )
+  },
+
+  getBlockList() {
+    return http.get<{ success: boolean; data: UserProfile[]; error?: string | null }>(
+      '/friend/blocked',
+    )
+  },
+
+  checkBlockStatus(userId: number) {
+    return http.post<{ success: boolean; data?: { blockerIds: number[] } | null; error?: string | null }>(
+      '/friend/block-status',
+      { userId },
+    )
+  },
 }

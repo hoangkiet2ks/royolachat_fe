@@ -12,7 +12,7 @@ interface SidebarProps { onSelectChat: (id: string | null) => void; activeId: st
 
 export default function SideBar({ onSelectChat, activeId, onOpenProfile }: SidebarProps) {
   const [mobileListOpen, setMobileListOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "friends" | "requests" | "royola-bot">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "friends" | "requests" | "blocked" | "royola-bot">("chat");
   const [isBotLoading, setIsBotLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [requestRefreshTrigger, setRequestRefreshTrigger] = useState(0);
@@ -20,6 +20,7 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
   const [conversations, setConversations] = useState<any[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [blockedList, setBlockedList] = useState<any[]>([]);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [eligibleFriendsForGroup, setEligibleFriendsForGroup] = useState<any[]>([]);
@@ -47,6 +48,27 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
     } catch { /* ignore */ }
   };
 
+  const fetchBlockedList = async () => {
+    try {
+      const res = await friendApi.getBlockList();
+      if (res.data.success) setBlockedList(res.data.data || []);
+    } catch { /* ignore */ }
+  };
+
+  const handleBlockFriend = (friend: any) => {
+    if (!window.confirm(`Bạn có chắc muốn chặn ${friend.name}? Họ sẽ không thể nhắn tin hoặc gọi điện cho bạn.`)) return;
+    friendApi.blockUser(friend.id)
+      .then(() => { alert(`${friend.name} đã bị chặn.`); fetchBlockedList(); fetchConversations(); })
+      .catch(() => { alert('Chặn thất bại.'); });
+  };
+
+  const handleUnblockUser = (user: any) => {
+    if (!window.confirm(`Bỏ chặn ${user.name}?`)) return;
+    friendApi.unblockUser(user.id)
+      .then(() => { alert(`Đã bỏ chặn ${user.name}.`); fetchBlockedList(); })
+      .catch(() => { alert('Bỏ chặn thất bại.'); });
+  };
+
   useEffect(() => {
     if (session?.accessToken) fetchPendingCount();
   }, [session, requestRefreshTrigger]);
@@ -54,6 +76,13 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
   useEffect(() => {
     if (activeTab === "requests") setPendingCount(0);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (session?.accessToken) {
+      fetchPendingCount();
+      if (activeTab === 'blocked') fetchBlockedList();
+    }
+  }, [session, activeTab]);
 
   const fetchConversations = async () => {
     try {
@@ -96,18 +125,24 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
     // Listener cho lời mời kết bạn mới
     const handleFriendRequest = (data: { requesterId: number; requesterName: string; requesterAvatar: string | null }) => {
       console.log('[Friend] Received friend request from:', data.requesterName);
-      // Tăng số lượng pending requests
       setPendingCount(prev => prev + 1);
-      // Trigger refresh để cập nhật danh sách
       setRequestRefreshTrigger(prev => prev + 1);
     };
 
+    // Listener khi có người block/unblock
+    const handleFriendBlocked = () => { fetchBlockedList(); };
+    const handleFriendUnblocked = () => { fetchBlockedList(); };
+
     socket.on('newMessage', handleNewMessage);
     socket.on('friend:request-received', handleFriendRequest);
-    
-    return () => { 
+    socket.on('friend:blocked', handleFriendBlocked);
+    socket.on('friend:unblocked', handleFriendUnblocked);
+
+    return () => {
       socket.off('newMessage', handleNewMessage);
       socket.off('friend:request-received', handleFriendRequest);
+      socket.off('friend:blocked', handleFriendBlocked);
+      socket.off('friend:unblocked', handleFriendUnblocked);
     };
   }, [socket, activeId, session]);
 
@@ -253,6 +288,20 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
             )}
           </button>
           <button
+            onClick={() => {
+              if (activeTab === 'blocked') {
+                setMobileListOpen(prev => !prev);
+              } else {
+                setActiveTab("blocked");
+                setMobileListOpen(true);
+              }
+            }}
+            className={`moji-nav-btn ${activeTab === 'blocked' ? 'active' : ''}`}
+            title="Đã chặn"
+          >
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+          </button>
+          <button
             onClick={handleOpenRoyolaBot}
             className={`moji-nav-btn ${activeTab === 'royola-bot' ? 'active' : ''}`}
             title="Chat với Royola Bot"
@@ -311,6 +360,42 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
         <div className="moji-chat-list-container">
           {activeTab === "friends" && <div className="flex flex-col h-full"><FriendSearch /><FriendList onStartChat={handleStartChatWithFriend} refreshTrigger={requestRefreshTrigger} /></div>}
           {activeTab === "requests" && <PendingRequests refreshTrigger={requestRefreshTrigger} onRequestHandled={() => { setRequestRefreshTrigger(prev => prev + 1); fetchPendingCount(); }} />}
+          {activeTab === "blocked" && (
+            <div style={{ padding: '16px 8px' }}>
+              <h3 className="moji-list-title" style={{ margin: '0 0 16px 8px' }}>Đã chặn ({blockedList.length})</h3>
+              {blockedList.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-sub)', fontSize: '0.95rem' }}>
+                  Bạn chưa chặn ai.
+                </div>
+              ) : (
+                blockedList.map(user => (
+                  <div key={user.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 10px', borderRadius: '12px', gap: '12px', marginBottom: '4px', background: 'var(--bg-main)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                      {user.avatar ? (
+                        <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                          {user.name?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: 'var(--text-main)', fontWeight: 500, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+                      <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '2px' }}>Đang bị chặn</div>
+                    </div>
+                    <button
+                      onClick={() => handleUnblockUser(user)}
+                      style={{ padding: '6px 14px', background: 'transparent', color: '#8b5cf6', border: '1px solid #8b5cf6', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = '#fff'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8b5cf6'; }}
+                    >
+                      Bỏ chặn
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
           {activeTab === "chat" && (
             <div style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px', marginBottom: '12px' }}>

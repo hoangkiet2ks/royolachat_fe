@@ -7,6 +7,7 @@ import EmojiPicker from 'emoji-picker-react';
 import { CreatePollModal } from './CreatePollModal';
 import { PollMessage, type PollData } from './PollMessage';
 import { ProfileCard } from '../profile/ProfileCard';
+import { friendApi } from '../../features/friend/friend.api';
 
 // Cập nhật Interface để chứa Reaction và isPinned
 interface Reaction { id: number; messageId: number; userId: number; emoji: string; }
@@ -73,6 +74,10 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [showPinnedList, setShowPinnedList] = useState(false);
 
+  // STATE: Block (chỉ dùng cho chat 1-1)
+  // null = không block, number = ID của người đang chặn mình
+  const [blockStatus, setBlockStatus] = useState<number | null>(null);
+
   // STATE: Bot typing & Smart Reply (Subtask 8.1, 8.2)
   const [botTyping, setBotTyping] = useState(false);
   const [smartReplies, setSmartReplies] = useState<{ messageId: number; replies: string[] } | null>(null);
@@ -136,6 +141,25 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       setMessages(sortedMessages);
       setChatInfo(infoRes.data);
       setPinnedMessages(pinsRes.data);
+
+      // Kiểm tra trạng thái block (chỉ cho chat 1-1)
+      if (!infoRes.data?.isGroup && infoRes.data?.partnerId) {
+        try {
+          const blockRes = await friendApi.checkBlockStatus(infoRes.data.partnerId);
+          // Backend trả về: { blockerIds: number[] } | null
+          // null = không có block, [] = không ai chặn ai, [x] = người x đang chặn
+          const data = blockRes.data?.data;
+          if (data && data.blockerIds && data.blockerIds.length > 0) {
+            setBlockStatus(data.blockerIds[0]);
+          } else {
+            setBlockStatus(null);
+          }
+        } catch {
+          setBlockStatus(null);
+        }
+      } else {
+        setBlockStatus(null);
+      }
     } catch (error) { console.error('Lỗi lấy dữ liệu chat:', error); }
   };
 
@@ -257,6 +281,15 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
     socket.on('userStoppedTyping', handleUserStoppedTyping);
     socket.on('pollUpdated', handlePollUpdated);
 
+    // Block events
+    const handleFriendBlocked = () => { fetchChatData(); };
+    const handleFriendUnblocked = () => { fetchChatData(); };
+    const handleErrorBlocked = (data: any) => { alert(data.message || 'Không thể gửi tin nhắn vì có chặn giữa hai bạn.'); };
+
+    socket.on('friend:blocked', handleFriendBlocked);
+    socket.on('friend:unblocked', handleFriendUnblocked);
+    socket.on('error:blocked', handleErrorBlocked);
+
     return () => {
       socket.off('statusAnswer', handleStatusAnswer);
       socket.off('newMessage', handleNewMessage);
@@ -270,6 +303,9 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
       socket.off('userTyping', handleUserTyping);
       socket.off('userStoppedTyping', handleUserStoppedTyping);
       socket.off('pollUpdated', handlePollUpdated);
+      socket.off('friend:blocked', handleFriendBlocked);
+      socket.off('friend:unblocked', handleFriendUnblocked);
+      socket.off('error:blocked', handleErrorBlocked);
     };
   }, [socket, chatInfo, conversationId, session?.userId]);
 
@@ -699,6 +735,18 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* BLOCK BANNER */}
+        {!chatInfo?.isGroup && blockStatus !== null && (
+          <div style={{ background: '#fef2f2', borderTop: '1px solid #fecaca', borderBottom: '1px solid #fecaca', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="18" height="18" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+            <span style={{ flex: 1, fontSize: '0.85rem', color: '#ef4444', fontWeight: 500 }}>
+              {blockStatus === Number(session?.userId)
+                ? 'Bạn đã chặn người này. Họ không thể nhắn tin hoặc gọi cho bạn.'
+                : 'Bạn đã bị người dùng chặn.'}
+            </span>
           </div>
         )}
 
@@ -1278,6 +1326,17 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
             </div>
           )}
 
+          {/* Input area — ẩn khi bị block */}
+          {(!chatInfo?.isGroup && blockStatus !== null) ? (
+            <div style={{ background: 'var(--bg-panel)', borderTop: '1px solid var(--border-color)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <svg width="16" height="16" fill="none" stroke="#9ca3af" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <span style={{ fontSize: '0.9rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                {blockStatus === Number(session?.userId)
+                  ? 'Bỏ chặn để có thể nhắn tin'
+                  : 'Không thể gửi tin nhắn'}
+              </span>
+            </div>
+          ) : (
           <div className="moji-chat-input-row" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', borderRadius: '24px', padding: '10px 18px', border: '1px solid var(--border-color)', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
             <svg onClick={() => fileInputRef.current?.click()} style={{ color: isUploading ? '#8b5cf6' : 'var(--text-sub)', cursor: isUploading ? 'wait' : 'pointer', marginRight: '8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
@@ -1299,6 +1358,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
             <svg className="emoji-hide-mobile" onClick={() => setShowEmoji(!showEmoji)} style={{ color: showEmoji ? '#8b5cf6' : 'var(--text-sub)', cursor: 'pointer', margin: '0 8px', flexShrink: 0, transition: 'color 0.2s' }} width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <button onClick={handleSend} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style={{ transform: 'translateX(2px)' }}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg></button>
           </div>
+          )}
         </div>
       </div>
 
@@ -1404,7 +1464,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
               </div>
             </div>
 
-            {/* Nút Xóa Lịch Sử & Rời Nhóm */}
+            {/* Nút Xóa Lịch Sử, Block/Unblock, Rời Nhóm */}
             <div style={{ padding: '24px 16px' }}>
               <button
                 onClick={handleClearHistory}
@@ -1415,6 +1475,45 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                 <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 Xóa lịch sử trò chuyện
               </button>
+
+              {/* Block / Unblock - chỉ cho chat 1-1 */}
+              {!chatInfo?.isGroup && (
+                blockStatus === Number(session?.userId) ? (
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`Bỏ chặn ${chatInfo?.name}?`)) return;
+                      try {
+                        await friendApi.unblockUser(chatInfo.partnerId!);
+                        setBlockStatus(null);
+                        alert('Đã bỏ chặn.');
+                      } catch { alert('Bỏ chặn thất bại.'); }
+                    }}
+                    style={{ width: '100%', padding: '12px', background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', marginBottom: '12px' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.color = '#fff'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16,185,129,0.1)'; e.currentTarget.style.color = '#10b981'; }}
+                  >
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                    Bỏ chặn người dùng
+                  </button>
+                ) : blockStatus !== null ? null : (
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`Chặn ${chatInfo?.name}? Họ sẽ không thể nhắn tin hoặc gọi cho bạn.`)) return;
+                      try {
+                        await friendApi.blockUser(chatInfo.partnerId!);
+                        setBlockStatus(Number(session?.userId));
+                        alert('Đã chặn.');
+                      } catch { alert('Chặn thất bại.'); }
+                    }}
+                    style={{ width: '100%', padding: '12px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', marginBottom: '12px' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#fff'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#ef4444'; }}
+                  >
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                    Chặn người dùng
+                  </button>
+                )
+              )}
 
               {chatInfo?.isGroup && (
                 <button onClick={() => handleLeaveGroup()} style={{ width: '100%', padding: '12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s', marginBottom: '12px' }}>
