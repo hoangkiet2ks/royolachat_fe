@@ -55,12 +55,6 @@ export default function SideBar({ onSelectChat, activeId, onOpenProfile }: Sideb
     } catch { /* ignore */ }
   };
 
-  const handleBlockFriend = (friend: any) => {
-    if (!window.confirm(`Bạn có chắc muốn chặn ${friend.name}? Họ sẽ không thể nhắn tin hoặc gọi điện cho bạn.`)) return;
-    friendApi.blockUser(friend.id)
-      .then(() => { alert(`${friend.name} đã bị chặn.`); fetchBlockedList(); fetchConversations(); })
-      .catch(() => { alert('Chặn thất bại.'); });
-  };
 
   const handleUnblockUser = (user: any) => {
     if (!window.confirm(`Bỏ chặn ${user.name}?`)) return;

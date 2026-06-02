@@ -1483,7 +1483,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                     onClick={async () => {
                       if (!window.confirm(`Bỏ chặn ${chatInfo?.name}?`)) return;
                       try {
-                        await friendApi.unblockUser(chatInfo.partnerId!);
+                        await friendApi.unblockUser(chatInfo?.partnerId!);
                         setBlockStatus(null);
                         alert('Đã bỏ chặn.');
                       } catch { alert('Bỏ chặn thất bại.'); }
@@ -1500,7 +1500,7 @@ export default function ChatRoom({ conversationId, onToggleSidebar, sidebarColla
                     onClick={async () => {
                       if (!window.confirm(`Chặn ${chatInfo?.name}? Họ sẽ không thể nhắn tin hoặc gọi cho bạn.`)) return;
                       try {
-                        await friendApi.blockUser(chatInfo.partnerId!);
+                        await friendApi.blockUser(chatInfo?.partnerId!);
                         setBlockStatus(Number(session?.userId));
                         alert('Đã chặn.');
                       } catch { alert('Chặn thất bại.'); }
